@@ -1,0 +1,66 @@
+# ═══════════════════════════════════════════════════════════════════
+# PERFIL: PROD (Producción)
+# ═══════════════════════════════════════════════════════════════════
+#
+# USO: java -jar infratrack.jar --spring.profiles.active=prod
+#
+# CARACTERÍSTICAS:
+# - PostgreSQL externo
+# - SSH real a servidores
+# - Cifrado obligatorio
+# - Todas las credenciales desde variables de entorno
+#
+# ⚠️ IMPORTANTE: NUNCA hardcodear secretos aquí
+#
+# ═══════════════════════════════════════════════════════════════════
+
+spring:
+  datasource:
+    # Estas URLs deben venir de variables de entorno en producción
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/infratrack}
+    username: ${DATABASE_USER:infratrack_user}
+    password: ${DATABASE_PASSWORD}  # Obligatorio en env var
+    driver-class-name: org.postgresql.Driver
+    
+    # Connection pool configuration
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate  # NUNCA auto-crear en prod
+    show-sql: false  # Sin logs de SQL en prod
+
+# Cifrado OBLIGATORIO en producción
+infratrack:
+  security:
+    encryption:
+      enabled: true
+      # La clave DEBE venir de variable de entorno
+      key: ${INFRATRACK_ENCRYPTION_KEY}  # Sin default, falla si no existe
+  
+  # SSH real
+  ssh:
+    mock:
+      enabled: false
+  
+  # Demo mode deshabilitado
+  demo:
+    enabled: false
+
+# Logs minimalistas en producción
+logging:
+  level:
+    root: WARN
+    com.infratrack: INFO
+    org.springframework.web: WARN
+  
+  # Log a archivo en producción
+  file:
+    name: /var/log/infratrack/application.log
+    max-size: 10MB
+    max-history: 30

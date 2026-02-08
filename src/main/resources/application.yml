@@ -1,0 +1,43 @@
+# Common configuration for all profiles
+
+spring:
+  application:
+    name: infratrack
+  
+  jpa:
+    open-in-view: false
+    show-sql: false
+    hibernate:
+      ddl-auto: validate  # Using Flyway for migrations
+    properties:
+      hibernate:
+        format_sql: true
+  
+  # Enable Virtual Threads (Java 21 feature)
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: 8080
+  compression:
+    enabled: true
+  error:
+    include-message: always
+    include-stacktrace: on_param
+
+logging:
+  level:
+    root: INFO
+    com.infratrack: DEBUG
+
+# Custom application properties
+infratrack:
+  security:
+    encryption:
+      enabled: true
+  ssh:
+    connection:
+      timeout-seconds: 30
+  monitoring:
+    interval-seconds: 60

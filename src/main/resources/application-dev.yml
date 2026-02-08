@@ -1,0 +1,50 @@
+# ═══════════════════════════════════════════════════════════════════
+# PERFIL: DEV (Desarrollo Local)
+# ═══════════════════════════════════════════════════════════════════
+#
+# USO: mvn spring-boot:run -Dspring-boot.run.profiles=dev
+#
+# CARACTERÍSTICAS:
+# - H2 en memoria (no requiere Docker)
+# - Mock SSH (sin conexiones reales)
+# - Cifrado deshabilitado (para facilitar debugging)
+# - Logs verbosos
+#
+# ═══════════════════════════════════════════════════════════════════
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:infratrack
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  
+  h2:
+    console:
+      enabled: true  # Accesible en http://localhost:8080/h2-console
+      path: /h2-console
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop  # Recrea la BD cada vez (solo en dev)
+    show-sql: true
+
+# Deshabilitamos cifrado en dev para facilitar debugging
+infratrack:
+  security:
+    encryption:
+      enabled: false
+  
+  # SSH en modo Mock
+  ssh:
+    mock:
+      enabled: true
+  
+  # Monitorización más frecuente en dev
+  monitoring:
+    interval-seconds: 30
+
+logging:
+  level:
+    com.infratrack: TRACE  # Máximo detalle
+    org.springframework.web: DEBUG

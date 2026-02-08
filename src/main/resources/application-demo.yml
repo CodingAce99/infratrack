@@ -1,0 +1,50 @@
+# ═══════════════════════════════════════════════════════════════════
+# PERFIL: DEMO (Para mostrar a recruiters)
+# ═══════════════════════════════════════════════════════════════════
+#
+# USO: docker-compose up (usa este perfil por defecto)
+#
+# CARACTERÍSTICAS:
+# - PostgreSQL real en Docker
+# - Mock SSH con datos simulados realistas
+# - Cifrado habilitado
+# - Datos de prueba autogenerados
+#
+# ═══════════════════════════════════════════════════════════════════
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/infratrack
+    username: infratrack_user
+    password: infratrack_pass
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update  # Crea tablas automáticamente si no existen
+    show-sql: false  # No spamear logs en demo
+
+# Cifrado habilitado con clave por defecto (cambiar en prod)
+infratrack:
+  security:
+    encryption:
+      enabled: true
+      # Esta clave debe ser de 32 caracteres en Base64
+      # En producción, debe venir de variable de entorno
+      key: ${INFRATRACK_ENCRYPTION_KEY:dGVzdC1rZXktMzItY2hhcmFjdGVycy1iYXNlNjQ=}
+  
+  # SSH en modo Mock pero con datos realistas
+  ssh:
+    mock:
+      enabled: true
+      simulate-metrics: true
+  
+  # Auto-generar datos de demo al iniciar
+  demo:
+    enabled: true
+    generate-sample-data: true
+
+logging:
+  level:
+    com.infratrack: INFO
+    org.springframework.web: INFO
