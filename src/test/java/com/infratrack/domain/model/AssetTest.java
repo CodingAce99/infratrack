@@ -16,7 +16,7 @@ class AssetTest {
         return Asset.create(
                 "Core Router",
                 AssetType.ROUTER,
-                new IpAddress("192.168.1.1"),
+                IpAddress.of("192.168.1.1"),
                 Credentials.of("admin", "s3cr3t")
         );
     }
@@ -45,7 +45,7 @@ class AssetTest {
     @DisplayName("create() debe lanzar NullPointerException si name es null")
     void create_shouldThrowNullPointerException_whenNameIsNull() {
         assertThrows(NullPointerException.class, () ->
-                Asset.create(null, AssetType.SERVER, new IpAddress("10.0.0.1"), Credentials.of("u", "p"))
+                Asset.create(null, AssetType.SERVER, IpAddress.of("10.0.0.1"), Credentials.of("u", "p"))
         );
     }
 
@@ -53,7 +53,7 @@ class AssetTest {
     @DisplayName("create() debe lanzar NullPointerException si type es null")
     void create_shouldThrowNullPointerException_whenTypeIsNull() {
         assertThrows(NullPointerException.class, () ->
-                Asset.create("Server A", null, new IpAddress("10.0.0.1"), Credentials.of("u", "p"))
+                Asset.create("Server A", null, IpAddress.of("10.0.0.1"), Credentials.of("u", "p"))
         );
     }
 
@@ -69,7 +69,7 @@ class AssetTest {
     @DisplayName("create() debe lanzar NullPointerException si credentials es null")
     void create_shouldThrowNullPointerException_whenCredentialsIsNull() {
         assertThrows(NullPointerException.class, () ->
-                Asset.create("Server A", AssetType.SERVER, new IpAddress("10.0.0.1"), null)
+                Asset.create("Server A", AssetType.SERVER, IpAddress.of("10.0.0.1"), null)
         );
     }
 
@@ -83,7 +83,7 @@ class AssetTest {
         AssetId id          = AssetId.generate();
         String name         = "Edge Router";
         AssetType type      = AssetType.ROUTER;
-        IpAddress ip        = new IpAddress("172.16.0.1");
+        IpAddress ip        = IpAddress.of("172.16.0.1");
         AssetStatus status  = AssetStatus.MAINTENANCE;
         Credentials creds   = Credentials.of("ops", "p@ssw0rd");
 
@@ -108,7 +108,7 @@ class AssetTest {
     void activate_shouldSetStatusToActive() {
         Asset asset = Asset.reconstitute(
                 AssetId.generate(), "Server B", AssetType.SERVER,
-                new IpAddress("10.0.0.2"), AssetStatus.INACTIVE, Credentials.of("u", "p")
+                IpAddress.of("10.0.0.2"), AssetStatus.INACTIVE, Credentials.of("u", "p")
         );
 
         asset.activate();
@@ -167,7 +167,7 @@ class AssetTest {
     @DisplayName("updateIpAddress() debe actualizar la dirección IP correctamente")
     void updateIpAddress_shouldReplaceIpAddress() {
         Asset asset = createSampleAsset();
-        IpAddress newIp = new IpAddress("10.10.10.10");
+        IpAddress newIp = IpAddress.of("10.10.10.10");
 
         asset.updateIpAddress(newIp);
 
@@ -192,10 +192,10 @@ class AssetTest {
         AssetId sharedId = AssetId.generate();
 
         Asset a1 = Asset.reconstitute(sharedId, "Router A", AssetType.ROUTER,
-                new IpAddress("192.168.0.1"), AssetStatus.ACTIVE, Credentials.of("u1", "p1"));
+                IpAddress.of("192.168.0.1"), AssetStatus.ACTIVE, Credentials.of("u1", "p1"));
 
         Asset a2 = Asset.reconstitute(sharedId, "Router B (renamed)", AssetType.IOT_DEVICE,
-                new IpAddress("192.168.0.2"), AssetStatus.INACTIVE, Credentials.of("u2", "p2"));
+                IpAddress.of("192.168.0.2"), AssetStatus.INACTIVE, Credentials.of("u2", "p2"));
 
         assertEquals(a1, a2);
     }

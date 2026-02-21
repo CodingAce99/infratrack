@@ -44,7 +44,7 @@ class AssetServiceTest {
         return Asset.create(
                 "Core Router",
                 AssetType.ROUTER,
-                new IpAddress("192.168.1.1"),
+                IpAddress.of("192.168.1.1"),
                 Credentials.of("admin", "s3cr3t")
         );
     }
@@ -77,7 +77,7 @@ class AssetServiceTest {
         void createAsset_shouldSaveAndReturnNewAsset() {
             Asset result = assetService.createAsset(
                     "Core Router", AssetType.ROUTER,
-                    new IpAddress("192.168.1.1"), Credentials.of("admin", "s3cr3t")
+                    IpAddress.of("192.168.1.1"), Credentials.of("admin", "s3cr3t")
             );
 
             assertNotNull(result);
@@ -157,7 +157,7 @@ class AssetServiceTest {
         void updateAssetStatus_shouldSetActive() {
             Asset asset = Asset.reconstitute(
                     AssetId.generate(), "Server A", AssetType.SERVER,
-                    new IpAddress("10.0.0.1"), AssetStatus.INACTIVE,
+                    IpAddress.of("10.0.0.1"), AssetStatus.INACTIVE,
                     Credentials.of("u", "p")
             );
             when(assetRepository.findById(asset.getId())).thenReturn(Optional.of(asset));
@@ -227,7 +227,7 @@ class AssetServiceTest {
         @DisplayName("debe actualizar la IP y llamar a save()")
         void updateAssetIpAddress_shouldReplaceIpAddressAndSave() {
             Asset asset = sampleAsset();
-            IpAddress newIp = new IpAddress("10.20.30.40");
+            IpAddress newIp = IpAddress.of("10.20.30.40");
             when(assetRepository.findById(asset.getId())).thenReturn(Optional.of(asset));
 
             Asset result = assetService.updateAssetIpAddress(asset.getId(), newIp);

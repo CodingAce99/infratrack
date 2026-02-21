@@ -9,17 +9,17 @@ class IpAddressTest {
     @Test
     void shouldCreateValidIpv4Address() {
         // Arrange & Act
-        IpAddress ip = new IpAddress("192.168.1.1");
+        IpAddress ip = IpAddress.of("192.168.1.1");
 
         // Assert
-        assertEquals("192.168.1.1", ip.value());
+        assertEquals("192.168.1.1", ip.getValue());
     }
 
     @Test
     void shouldRejectNullIpAddress() {
         // Act & Assert
         assertThrows(NullPointerException.class, () -> {
-            new IpAddress(null);
+            IpAddress.of(null);
         });
     }
 
@@ -27,7 +27,7 @@ class IpAddressTest {
     void shouldRejectEmptyIpAddress() {
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            new IpAddress("");
+            IpAddress.of("");
         });
     }
 
@@ -35,7 +35,7 @@ class IpAddressTest {
     void shouldRejectInvalidIpAddress() {
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            new IpAddress("999.999.999.999");
+            IpAddress.of("999.999.999.999");
         });
     }
 
@@ -43,15 +43,15 @@ class IpAddressTest {
     void shouldRejectNonNumericIpAddress() {
         // Act & Assert
         assertThrows(IllegalArgumentException.class, () -> {
-            new IpAddress("not.an.ip.address");
+            IpAddress.of("not.an.ip.address");
         });
     }
 
     @Test
     void twoIpAddressesWithSameValueShouldBeEqual() {
         // Arrange
-        IpAddress ip1 = new IpAddress("192.168.1.1");
-        IpAddress ip2 = new IpAddress("192.168.1.1");
+        IpAddress ip1 = IpAddress.of("192.168.1.1");
+        IpAddress ip2 = IpAddress.of("192.168.1.1");
 
         // Act & Assert
         assertEquals(ip1, ip2);
