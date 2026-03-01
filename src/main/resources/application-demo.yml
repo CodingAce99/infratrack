@@ -14,24 +14,29 @@
 
 spring:
   datasource:
-    url: jdbc:postgresql://postgres:5432/infratrack
+    url: jdbc:postgresql://localhost:5433/infratrack
     username: infratrack_user
     password: infratrack_pass
     driver-class-name: org.postgresql.Driver
-  
+
+  sql:
+    init:
+      mode: always      # Ejecuta schema.sql en cada inicio
+
   jpa:
     hibernate:
-      ddl-auto: update  # Crea tablas automáticamente si no existen
-    show-sql: false  # No spamear logs en demo
+      ddl-auto: validate # Validar esquema, no modificar
+    show-sql: true
 
 # Cifrado habilitado con clave por defecto (cambiar en prod)
 infratrack:
+  encryption:
+    # Esta clave es solo para demo, en producción debe ser segura y no estar hardcodeada
+    key: ${INFRATRACK_ENCRYPTION_KEY:yt1+CDm1+7KdsybbxWrFcunLl8hnMTROPrEdi2daEuc=}
   security:
     encryption:
       enabled: true
       # Esta clave debe ser de 32 caracteres en Base64
-      # En producción, debe venir de variable de entorno
-      key: ${INFRATRACK_ENCRYPTION_KEY:dGVzdC1rZXktMzItY2hhcmFjdGVycy1iYXNlNjQ=}
   
   # SSH en modo Mock pero con datos realistas
   ssh:
@@ -46,5 +51,5 @@ infratrack:
 
 logging:
   level:
-    com.infratrack: INFO
-    org.springframework.web: INFO
+    com.infratrack: DEBUG
+    org.springframework.web: DEBUG

@@ -1,9 +1,8 @@
 package com.infratrack.infrastructure.persistence;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+
+import com.infratrack.infrastructure.security.EncryptedStringConverter;
+import jakarta.persistence.*;
 
 @Entity
 @Table(name = "assets")
@@ -27,6 +26,7 @@ public class AssetJpaEntity {
     @Column(nullable = false)
     private String username;
 
+    @Convert(converter = EncryptedStringConverter.class)
     @Column(nullable = false)
     private String password;
 

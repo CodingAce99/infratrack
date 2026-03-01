@@ -5,6 +5,7 @@ import com.infratrack.application.port.output.AssetRepository;
 import com.infratrack.application.service.AssetService;
 import com.infratrack.infrastructure.adapter.output.InMemoryAssetRepository;
 import com.infratrack.infrastructure.adapter.output.JpaAssetRepository;
+import com.infratrack.infrastructure.persistence.SpringDataAssetRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -20,8 +21,8 @@ public class BeanConfiguration {
 
     @Bean
     @Profile({"demo", "prod"})
-    public AssetRepository jpaAssetRepository(JpaAssetRepository jpaAssetRepository) {
-        return jpaAssetRepository;
+    public AssetRepository jpaAssetRepository(SpringDataAssetRepository springRepo) {
+        return new JpaAssetRepository(springRepo);
     }
 
     @Bean

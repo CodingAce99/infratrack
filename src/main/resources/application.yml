@@ -8,7 +8,7 @@ spring:
     open-in-view: false
     show-sql: false
     hibernate:
-      ddl-auto: validate  # Using Flyway for migrations
+      ddl-auto: validate  # Validar esquema, no modificar
     properties:
       hibernate:
         format_sql: true
@@ -33,6 +33,8 @@ logging:
 
 # Custom application properties
 infratrack:
+  encryption:
+    key: ${INFRATRACK_ENCRYPTION_KEY}
   security:
     encryption:
       enabled: true

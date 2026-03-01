@@ -6,13 +6,11 @@ import com.infratrack.domain.model.AssetId;
 import com.infratrack.infrastructure.persistence.AssetMapper;
 import com.infratrack.infrastructure.persistence.SpringDataAssetRepository;
 import org.springframework.context.annotation.Profile;
-import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-@Repository
 @Profile({"demo", "prod"})
 public class JpaAssetRepository implements AssetRepository {
 

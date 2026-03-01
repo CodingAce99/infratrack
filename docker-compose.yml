@@ -7,7 +7,7 @@ services:
     image: postgres:17-alpine
     container_name: infratrack-postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_DB: infratrack
       POSTGRES_USER: infratrack_user
