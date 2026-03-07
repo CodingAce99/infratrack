@@ -1,131 +1,165 @@
 # CLAUDE.md
 
-Este archivo proporciona orientación a Claude Code (claude.ai/code) para trabajar con el código de este repositorio.
+This file provides guidance to Claude Code (claude.ai/code) when working with this repository.
 
-## Comandos de Build y Ejecución
+## Build & Run Commands
 
 ```bash
-# Ejecutar con perfil dev (H2 en memoria, sin Docker)
+# Run with dev profile (H2 in-memory, no Docker required)
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 
-# Ejecutar con perfil demo (PostgreSQL + mock SSH)
+# Run with demo profile (PostgreSQL + mock SSH)
 docker-compose up -d postgres
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=demo
 
-# Construir JAR
+# Build JAR
 ./mvnw clean package
 
-# Ejecutar todos los tests
+# Run all tests
 ./mvnw test
 
-# Ejecutar clase de test específica
-./mvnw test -Dtest=AssetServiceTest
+# Run a specific test class
+./mvnw test -Dtest=AssetRestControllerTest
 
-# Saltar tests durante build
+# Skip tests during build
 ./mvnw clean package -DskipTests
 ```
 
-## Arquitectura
+## Architecture
 
-**Arquitectura Hexagonal (Puertos y Adaptadores)** - El código impone límites estrictos entre capas:
+**Hexagonal Architecture (Ports & Adapters)** — strict boundaries between layers:
 
 ```
-domain/           → Java puro, sin frameworks. Contiene entidad Asset, value objects
-                    (AssetId, IpAddress, Credentials) y lógica de dominio.
+domain/           → Pure Java, no frameworks. Contains Asset entity, value objects
+                    (AssetId, IpAddress, Credentials) and domain logic.
 
-application/      → Casos de uso y puertos. Sin Spring. Contiene:
-                    - port/input/: ManageAssetUseCase (lo que la app puede hacer)
-                    - port/output/: AssetRepository (lo que la app necesita)
-                    - service/: AssetService (implementación del caso de uso)
+application/      → Use cases and ports. No Spring. Contains:
+                    - port/input/: ManageAssetUseCase (what the app exposes)
+                    - port/output/: AssetRepository (what the app requires)
+                    - service/: AssetService (use case implementation)
 
-infrastructure/   → Spring Boot, JPA, REST. Contiene:
+infrastructure/   → Spring Boot, JPA, REST. Contains:
                     - adapter/input/: AssetRestController
+                    - adapter/input/dto/: Request/Response DTOs + AssetDtoMapper
                     - adapter/output/: JpaAssetRepository, InMemoryAssetRepository
-                    - config/: BeanConfiguration (wiring de beans por perfil)
+                    - config/: BeanConfiguration (profile-based bean wiring)
                     - persistence/: AssetJpaEntity, AssetMapper (Domain↔JPA), schema.sql
                     - security/: EncryptedStringConverter (AES-256-GCM)
 ```
 
-**Reglas Clave:**
-- La capa de dominio tiene cero dependencias de frameworks (bloqueado)
-- Todas las anotaciones Spring/JPA permanecen en la capa de infraestructura
-- Los objetos de dominio usan factory methods: `Asset.create()`, `Asset.reconstitute()`
-- Los value objects son inmutables y auto-validantes (lanzan excepción si input inválido)
-- `AssetService` y objetos de dominio se instancian via `BeanConfiguration` (no `@Service`)
-- `JpaAssetRepository` tiene `@Repository` pero NO se registra con `@Bean` para evitar bean duplicado
-- `InMemoryAssetRepository` para perfil `dev`; `JpaAssetRepository` para `demo`/`prod`
+**Key Rules:**
+- The domain layer has zero framework dependencies (enforced)
+- All Spring/JPA annotations stay in the infrastructure layer
+- Domain objects use factory methods: `Asset.create()`, `Asset.reconstitute()`
+- Value objects are immutable and self-validating (throw on invalid input)
+- `AssetService` and domain objects are instantiated via `BeanConfiguration` (not `@Service`)
+- `JpaAssetRepository` has `@Repository` but is NOT registered with `@Bean` — instantiated
+  manually via `new JpaAssetRepository(springRepo)` to avoid duplicate bean conflicts
+- `InMemoryAssetRepository` for `dev` profile; `JpaAssetRepository` for `demo`/`prod`
 
-## Perfiles
+## DTO Layer
 
-| Perfil | Base de Datos | SSH | DDL | Cuándo usar |
-|--------|---------------|-----|-----|-------------|
-| `dev` | H2 en memoria | Mock | `create-drop` | Iteración rápida, sin Docker |
-| `demo` | PostgreSQL:5433 | Mock (realista) | `validate` | Tests de integración, demos |
-| `prod` | PostgreSQL (env vars) | Real | `validate` | Despliegue en producción |
+DTOs live in `infrastructure/adapter/input/dto/` and are split by responsibility:
 
-El schema de la tabla `assets` se define en `src/main/resources/schema.sql` (gestionado manualmente).
-`ddl-auto: validate` (base) + `ddl-auto: create-drop` (perfil dev).
+**Request DTOs** (inbound) — with Bean Validation:
+- `CreateAssetRequest` — name, type, IP address, username, password
+- `UpdateStatusRequest` — new status (`ACTIVE` | `INACTIVE` | `MAINTENANCE`)
+- `UpdateCredentialsRequest` — new username and password
+- `UpdateIpAddressRequest` — new IP address
 
-## Endpoints de la API
+**Response DTO** (outbound):
+- `AssetResponse` — never contains a `password` field (security by construction)
 
-Todos en `/api/v1/assets`:
-- `GET /` - Listar todos los assets
-- `GET /{id}` - Obtener por ID
-- `POST /` - Crear asset
-- `PUT /{id}/status` - Actualizar estado
-- `PUT /{id}/credentials` - Actualizar credenciales SSH
-- `PUT /{id}/ip` - Actualizar dirección IP
-- `DELETE /{id}` - Eliminar asset
+**HTTP ↔ Domain Mapper:**
+- `AssetDtoMapper` — converts Request DTOs to domain objects, and `Asset` to `AssetResponse`
+- Distinct from `AssetMapper` (Domain ↔ JPA), which lives in `infrastructure/persistence/`
+
+## Profiles
+
+| Profile | Database | SSH | DDL | When to use |
+|---------|----------|-----|-----|-------------|
+| `dev` | H2 in-memory | Mock | `create-drop` | Fast iteration, no Docker |
+| `demo` | PostgreSQL:5433 | Realistic mock | `validate` | Integration tests, demos |
+| `prod` | PostgreSQL (env vars) | Real | `validate` | Production deployment |
+
+The `assets` table schema is defined in `src/main/resources/schema.sql` (managed manually).
+`ddl-auto: validate` (base) + `ddl-auto: create-drop` (dev profile override).
+
+## API Endpoints
+
+All endpoints under `/api/v1/assets`. All write operations use `@RequestBody` with typed DTOs:
+
+| Method | Path | Request Body | Response |
+|--------|------|--------------|----------|
+| `GET` | `/` | — | `List<AssetResponse>` |
+| `GET` | `/{id}` | — | `AssetResponse` |
+| `POST` | `/` | `CreateAssetRequest` | `AssetResponse` (201) |
+| `PUT` | `/{id}/status` | `UpdateStatusRequest` | `AssetResponse` |
+| `PUT` | `/{id}/credentials` | `UpdateCredentialsRequest` | `AssetResponse` |
+| `PUT` | `/{id}/ip` | `UpdateIpAddressRequest` | `AssetResponse` |
+| `DELETE` | `/{id}` | — | 204 No Content |
 
 ## Testing
 
-51 tests pasando. Usa JUnit 5 con Mockito. Los tests siguen el patrón:
-- Clases de test anidadas con `@Nested` y `@DisplayName`
-- Tests de servicio mockean la capa de repositorio
-- Tests de dominio son unit tests puros (sin mocks)
+**57 tests passing.** Uses JUnit 5 with Mockito. Test conventions:
+- Nested test classes with `@Nested` and `@DisplayName`
+- Domain tests: pure unit tests (no Spring, no mocks)
+- Service tests: plain Mockito (`@ExtendWith(MockitoExtension.class)`)
+- Controller tests: `@WebMvcTest` + `@MockitoBean` for the use case
+- Security tests: assert that `password` never appears in any response or `toString()`
 
-## Variables de Entorno
+## Environment Variables
 
-Requeridas para demo/prod:
-- `INFRATRACK_ENCRYPTION_KEY` - Clave AES de 32 bytes codificada en Base64
+Required for demo/prod:
+- `INFRATRACK_ENCRYPTION_KEY` — AES key, 32 bytes, Base64-encoded
 
-Solo para prod:
+Required for prod only:
 - `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
 
-## Decisiones de Diseño Importantes
+## Key Design Decisions
 
-- `JpaAssetRepository` tiene `@Repository` para que Spring Boot autoconfigure el `SpringDataAssetRepository`
-  subyacente, pero NO se registra con `@Bean` en `BeanConfiguration` — se instancia manualmente via
-  `new JpaAssetRepository(springRepo)` para evitar bean duplicado.
-- `EncryptedStringConverter` lee de `infratrack.encryption.key` (path en application.yml base).
-  NO usar `infratrack.security.encryption.key` (path incorrecto en versiones anteriores).
-- Sin DTOs todavía — `AssetRestController` usa `@RequestParam`. Se refactorizará en Sprint 3.1.
-- `Credentials.toString()` omite el password deliberadamente (seguridad).
-- Puerto PostgreSQL: 5433 (5432 ocupado por Docker Desktop interno).
-- Schema SQL gestionado manualmente (`schema.sql`) en lugar de dejar que Hibernate lo genere;
-  `ddl-auto: update` se descartó porque Hibernate no emitía DDL en PostgreSQL vacío.
+- **`JpaAssetRepository` bean wiring:** Has `@Repository` so Spring Boot autoconfigures the
+  underlying `SpringDataAssetRepository`, but is NOT registered with `@Bean` in
+  `BeanConfiguration` — instantiated manually to avoid duplicate bean conflicts.
+- **Encryption key path:** `infratrack.encryption.key` in `application.yml`.
+  Do NOT use `infratrack.security.encryption.key` (incorrect path from earlier versions).
+- **`AssetResponse` has no `password` field by design** — security by construction, not by
+  annotations. It is impossible to accidentally leak something that does not exist.
+- **`ManageAssetUseCase.createAsset(Asset)`** accepts a fully-built `Asset` object. Object
+  construction is the mapper's responsibility, not the use case or controller.
+- **`Credentials.toString()`** omits the password deliberately.
+- **PostgreSQL port:** 5433 (5432 is occupied by Docker Desktop's internal PostgreSQL).
+- **Manual schema management:** `schema.sql` + `spring.sql.init.mode=always`. `ddl-auto: update`
+  was discarded — Hibernate silently skipped DDL generation on empty PostgreSQL databases.
+- **`defer-datasource-initialization=true`** must NOT be used — it inverts the SQL/validate order.
+- **MapStruct** deferred to Phase 4+ — manual mappers used for pedagogical clarity.
 
-## Estado del Proyecto
+## Project Status
 
-### Completado
-- **Fase 2 completa**: CRUD de Asset end-to-end con perfil demo
-- PostgreSQL 17 en Docker (puerto 5433)
-- Cifrado AES-256-GCM via `EncryptedStringConverter` con schema.sql manual
-- Dos mappers: `AssetMapper` (Domain↔JPA) en la capa de persistencia
-- 51 tests pasando
+### Completed
 
-### Problemas Conocidos (a resolver en Sprint 3.1)
+**Phase 1 — Scaffolding:**
+- Full hexagonal package structure
+- Docker Compose with PostgreSQL 17 (port 5433)
+- dev / demo / prod profiles
 
-- El controlador usa `@RequestParam` en lugar de `@RequestBody`
-- El objeto de dominio `Asset` se devuelve directamente desde el controlador (sin capa DTO)
-- `id` e `ipAddress` se serializan como objetos `{value: ...}` en lugar de strings simples
-- `password` aparece en respuestas de la API (brecha de seguridad)
+**Phase 2 — Asset CRUD + Encryption:**
+- Full Asset CRUD end-to-end with demo profile
+- AES-256-GCM encryption via `EncryptedStringConverter` with manual schema
+- `AssetMapper` (Domain ↔ JPA) in persistence layer
+- 51 tests passing at phase close
 
-### Próximo: Sprint 3.1 — Implementación de DTOs
+**Sprint 3.1 — DTO Layer:**
+- 4 Request DTOs with Bean Validation
+- `AssetResponse` without `password` field (security by construction)
+- `AssetDtoMapper` in `infrastructure/adapter/input/dto/`
+- `AssetRestController` refactored to `@RequestBody` + typed DTOs
+- `ManageAssetUseCase.createAsset()` updated to `(Asset asset)` signature
+- New tests: `AssetDtoMapperTest`, `AssetResponseTest`, `AssetRestControllerTest`
+- **57 tests passing**
 
-- 4 Request DTOs con Bean Validation: `CreateAssetRequest`, `UpdateStatusRequest`,
-  `UpdateCredentialsRequest`, `UpdateIpAddressRequest`
-- `AssetResponse` (sin campo password — seguridad por construcción)
-- `AssetDtoMapper` en `infrastructure/adapter/input/dto/`
-- Refactorizar `AssetRestController` para usar `@RequestBody` y los nuevos DTOs
-- Tests que verifiquen que el password nunca aparece en ninguna respuesta
+### Next: Sprint 3.2 — Domain Events + Mock Metrics
+
+- Domain event publishing with `ApplicationEventPublisher`
+- Mock metrics (CPU, memory, disk) for demo mode
+- Async event listeners on Virtual Threads
