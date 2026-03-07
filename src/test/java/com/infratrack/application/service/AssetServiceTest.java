@@ -75,10 +75,9 @@ class AssetServiceTest {
         @Test
         @DisplayName("debe crear el asset, llamar a save() una vez y devolverlo")
         void createAsset_shouldSaveAndReturnNewAsset() {
-            Asset result = assetService.createAsset(
-                    "Core Router", AssetType.ROUTER,
-                    IpAddress.of("192.168.1.1"), Credentials.of("admin", "s3cr3t")
-            );
+            Asset asset = sampleAsset();
+
+            Asset result = assetService.createAsset(asset);
 
             assertNotNull(result);
             assertEquals("Core Router", result.getName());

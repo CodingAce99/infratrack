@@ -79,7 +79,7 @@ docker-compose up -d postgres
 ## Implementation Progress
 
 - [x] Phase 1: Hexagonal scaffolding, Docker Compose, domain Value Objects
-- [ ] Phase 2: Asset CRUD with encrypted credentials
+- [x] Phase 2: Asset CRUD with encrypted credentials
 - [ ] Phase 3: Domain events + mock metrics
 - [ ] Phase 4: Real SSH monitoring with Virtual Threads
 - [ ] Phase 5: React/Next.js frontend dashboard

@@ -2,12 +2,17 @@ package com.infratrack.infrastructure.adapter.input;
 
 import com.infratrack.application.port.input.ManageAssetUseCase;
 import com.infratrack.domain.model.*;
+import com.infratrack.infrastructure.adapter.input.dto.*;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 
 import java.util.List;
 import java.util.Objects;
 
+//(Adapter Rest HTTP de entrada)
 @RestController
 @RequestMapping("/api/v1/assets")
 public class AssetRestController {
@@ -22,67 +27,55 @@ public class AssetRestController {
 
     // endpoints REST para crear, obtener, actualizar y eliminar activos
     @GetMapping
-    public ResponseEntity<List<Asset>> findAllAssets() {
+    public ResponseEntity<List<AssetResponse>> findAllAssets() {
         List<Asset> assets = useCase.findAllAssets();
-        return ResponseEntity.ok(assets);
+        List<AssetResponse> assetResponse = assets.stream()
+                .map(AssetDtoMapper::toResponse)
+                .toList();
+        return ResponseEntity.ok(assetResponse);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Asset> findAsset(@PathVariable String id) {
-        AssetId assetId = AssetId.of(id);
-        Asset asset = useCase.findAsset(assetId);
-        return ResponseEntity.ok(asset);
+    public ResponseEntity<AssetResponse> findAsset(@PathVariable String id) {
+        Asset asset = useCase.findAsset(AssetId.of(id));
+        return ResponseEntity.status(HttpStatus.OK).body(AssetDtoMapper.toResponse(asset));
     }
 
     @PostMapping
-    public ResponseEntity<Asset> createAsset(
-            @RequestParam String name,
-            @RequestParam String type,
-            @RequestParam String ipAddress,
-            @RequestParam String username,
-            @RequestParam String password
-    ){
-        Asset asset = useCase.createAsset(
-                name,
-                AssetType.valueOf(type.toUpperCase()),
-                IpAddress.of(ipAddress),
-                Credentials.of(username, password)
-        );
-        return ResponseEntity.status(201).body(asset);
+    public ResponseEntity<AssetResponse> createAsset(@Valid @RequestBody CreateAssetRequest request) {
+        Asset asset = useCase.createAsset(AssetDtoMapper.toDomain(request));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(AssetDtoMapper.toResponse(asset));
     }
 
     @PutMapping("/{id}/status")
-    public ResponseEntity<Asset> updateAssetStatus(
+    public ResponseEntity<AssetResponse> updateAssetStatus(
             @PathVariable String id,
-            @RequestParam String status
-    ) {
-        AssetId assetId = AssetId.of(id);
-        AssetStatus assetStatus = AssetStatus.valueOf(status.toUpperCase());
-        Asset updatedAsset = useCase.updateAssetStatus(assetId, assetStatus);
-        return ResponseEntity.ok(updatedAsset);
+            @RequestBody @Valid UpdateStatusRequest request
+            ) {
+        Asset updatedAsset = useCase.updateAssetStatus(AssetId.of(id), AssetDtoMapper.toStatus(request));
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(AssetDtoMapper.toResponse(updatedAsset));
     }
 
     @PutMapping("/{id}/credentials")
-    public ResponseEntity<Asset> updateAssetCredentials(
+    public ResponseEntity<AssetResponse> updateAssetCredentials(
             @PathVariable String id,
-            @RequestParam String username,
-            @RequestParam String password
+            @Valid @RequestBody UpdateCredentialsRequest request
     ) {
-        AssetId assetId = AssetId.of(id);
-        Credentials newCredentials = Credentials.of(username, password);
-        Asset updatedAsset = useCase.updateAssetCredentials(assetId, newCredentials);
-        return ResponseEntity.ok(updatedAsset);
+        Asset updatedAsset = useCase.updateAssetCredentials(AssetId.of(id), AssetDtoMapper.toCredentials(request));
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(AssetDtoMapper.toResponse(updatedAsset));
     }
 
     @PutMapping("/{id}/ip")
-    public ResponseEntity<Asset> updateAssetIpAddress(
+    public ResponseEntity<AssetResponse> updateAssetIpAddress(
             @PathVariable String id,
-            @RequestParam String ipAddress
+            @Valid @RequestBody UpdateIpAddressRequest request
     ) {
-        AssetId assetId = AssetId.of(id);
-        IpAddress newIpAddress = IpAddress.of(ipAddress);
-        Asset updatedAsset = useCase.updateAssetIpAddress(assetId, newIpAddress);
-        return ResponseEntity.ok(updatedAsset);
+        Asset updatedAsset = useCase.updateAssetIpAddress(AssetId.of(id), AssetDtoMapper.toIpAddress(request));
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(AssetDtoMapper.toResponse(updatedAsset));
     }
 
     @DeleteMapping("/{id}")

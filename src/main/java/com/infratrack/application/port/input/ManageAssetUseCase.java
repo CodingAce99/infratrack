@@ -3,7 +3,6 @@ package com.infratrack.application.port.input;
 import com.infratrack.domain.model.Asset;
 import com.infratrack.domain.model.AssetId;
 import com.infratrack.domain.model.AssetStatus;
-import com.infratrack.domain.model.AssetType;
 import com.infratrack.domain.model.Credentials;
 import com.infratrack.domain.model.IpAddress;
 
@@ -11,7 +10,7 @@ import java.util.List;
 
 public interface ManageAssetUseCase {
 
-    Asset createAsset(String name, AssetType type, IpAddress ipAddress, Credentials credentials);
+    Asset createAsset(Asset asset);
 
     Asset findAsset(AssetId id);
 

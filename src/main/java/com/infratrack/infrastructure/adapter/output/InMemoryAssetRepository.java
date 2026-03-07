@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+//(Adaptador de salida en memoria para pruebas)
 public class InMemoryAssetRepository implements AssetRepository {
 
     private final Map<String, Asset> store = new HashMap<>();

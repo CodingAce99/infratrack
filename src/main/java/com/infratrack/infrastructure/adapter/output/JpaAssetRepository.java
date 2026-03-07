@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+//(Adaptador de salida JPA/Hibernate)
 @Profile({"demo", "prod"})
 public class JpaAssetRepository implements AssetRepository {
 

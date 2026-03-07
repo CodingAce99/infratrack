@@ -5,7 +5,6 @@ import com.infratrack.application.port.output.AssetRepository;
 import com.infratrack.domain.model.Asset;
 import com.infratrack.domain.model.AssetId;
 import com.infratrack.domain.model.AssetStatus;
-import com.infratrack.domain.model.AssetType;
 import com.infratrack.domain.model.Credentials;
 import com.infratrack.domain.model.IpAddress;
 
@@ -21,8 +20,7 @@ public class AssetService implements ManageAssetUseCase {
     }
 
     @Override
-    public Asset createAsset(String name, AssetType type, IpAddress ipAddress, Credentials credentials) {
-        Asset asset = Asset.create(name, type, ipAddress, credentials);
+    public Asset createAsset(Asset asset) {
         assetRepository.save(asset);
         return asset;
     }
