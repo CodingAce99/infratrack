@@ -1,49 +1,70 @@
 # Infratrack
 
-**IT infrastructure inventory and monitoring system** built with Java 21, Spring Boot 3.5, and Hexagonal Architecture.
+**IT infrastructure inventory and monitoring system** built with Java 21, Spring Boot 3.5, and PostgreSQL 17.
 
-Infratrack bridges the gap between physical inventory and the logical state of an IT infrastructure — providing a single source of truth for assets, credentials, and real-time metrics.
+Infratrack bridges the gap between physical inventory and the logical state of an IT infrastructure — providing a single source of truth for assets, credentials, and real-time health metrics.
+
+> **Why this project?** Managing IT assets typically means scattered spreadsheets, stale CMDBs, and credentials stored in plaintext. Infratrack solves this with a clean REST API backed by encrypted storage and proactive SSH monitoring — built on enterprise-grade architecture patterns.
 
 ---
 
-## Features
+## Highlights
 
-- **Asset Management** — Full CRUD for servers, routers, and IoT devices
-- **Secure Credentials** — AES-256-GCM encryption at rest for SSH credentials
-- **Active Monitoring** — SSH connections to extract real-time metrics *(in development)*
-- **Demo Mode** — Realistic simulated data with no real infrastructure required *(in development)*
-- **Zero-friction setup** — Fully Dockerized, runs with a single command
+- **Hexagonal Architecture** — Domain layer with zero framework dependencies. Swappable adapters for REST, JPA, SSH, and in-memory storage.
+- **Security by construction** — SSH credentials encrypted with AES-256-GCM at rest. API responses structurally cannot contain passwords (`AssetResponse` has no password field — not hidden, *absent*).
+- **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + simulated data), `prod` (real infrastructure).
+- **Virtual Threads** — Java 21 Virtual Threads enabled for non-blocking I/O across SSH connections and async event processing.
+- **57 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology | Version |
-|-------|------------|---------|
-| Runtime | Java | 21 LTS |
-| Framework | Spring Boot | 3.5.x |
-| Database | PostgreSQL | 17 |
-| Security | AES-256-GCM | — |
-| Containers | Docker + Docker Compose | — |
-| Testing | JUnit 5 + Mockito | — |
+| Layer | Technology |
+|-------|------------|
+| Runtime | Java 21 LTS (Virtual Threads) |
+| Framework | Spring Boot 3.5 |
+| Database | PostgreSQL 17 (Docker) |
+| Encryption | AES-256-GCM via JPA AttributeConverter |
+| SSH | SSHJ 0.40 *(upcoming)* |
+| Frontend | React 19 + Next.js 15 *(upcoming)* |
+| Infrastructure | Docker Compose, GitHub Actions |
+| Testing | JUnit 5, Mockito |
 
 ---
 
 ## Architecture
 
-Hexagonal Architecture (Ports & Adapters) with strict layer separation:
-
 ```
-com.infratrack/
-├── domain/           # Pure Java — entities, value objects, business logic
-├── application/      # Use cases and ports — zero framework dependencies
-└── infrastructure/   # Spring Boot, JPA, REST — input and output adapters
+                    ┌───────────────────────────────────────┐
+                    │           INFRASTRUCTURE              │
+                    │                                       │
+   HTTP Request ──▶ │  REST Controller                      │
+                    │       │                               │
+                    │       ▼                               │
+                    │  ┌─────────┐    ┌────────────────┐    │
+                    │  │DTO Layer│    │  JPA Adapter   │    │
+                    │  │ Mapper  │    │  (PostgreSQL)  │    │
+                    │  └────┬────┘    └───────▲────────┘    │
+                    │       │                 │             │
+                    ├───────┼─────────────────┼─────────────┤
+                    │       ▼                 │             │
+                    │  ┌─────────┐    ┌───────┴────────┐    │
+                    │  │ UseCase │───▶│  Repository    │    │
+                    │  │ (Port)  │    │  (Port)        │    │
+                    │  └────┬────┘    └────────────────┘    │
+                    │       │          APPLICATION          │
+                    ├───────┼───────────────────────────────┤
+                    │       ▼                               │
+                    │   Asset  ·  IpAddress  ·  Credentials │
+                    │   AssetId ·  AssetType  · AssetStatus │
+                    │              DOMAIN                   │
+                    └───────────────────────────────────────┘
 ```
 
-Key architectural decisions:
-- The domain has no knowledge of Spring, JPA, or HTTP
-- Credentials never appear in logs or API responses
-- `AssetResponse` has no `password` field — security by construction, not convention
+The **Dependency Rule** is strictly enforced: all dependencies point inward. The domain knows nothing about Spring, JPA, or HTTP. Value objects (`IpAddress`, `Credentials`, `AssetId`) are self-validating and immutable. Domain entities use factory methods (`Asset.create()`, `Asset.reconstitute()`) instead of public constructors.
+
+Two dedicated mapper layers keep concerns separated: `AssetDtoMapper` translates between HTTP and the domain, while `AssetMapper` translates between the domain and JPA entities.
 
 ---
 
@@ -51,53 +72,52 @@ Key architectural decisions:
 
 ### Prerequisites
 
-- Java 21 ([Eclipse Temurin](https://adoptium.net/))
-- Docker Desktop
+- **Java 21** — [Eclipse Temurin](https://adoptium.net/)
+- **Docker Desktop** — for PostgreSQL in demo/prod profiles
 
-### Demo mode (PostgreSQL + mock data)
+### Option 1: Demo mode (recommended for evaluation)
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-username/infratrack.git
+git clone https://github.com/CodingAce99/infratrack.git
 cd infratrack
 
-# 2. Set the encryption key (generate one with: openssl rand -base64 32)
-export INFRATRACK_ENCRYPTION_KEY=<your-32-byte-base64-key>
+# Generate an encryption key
+export INFRATRACK_ENCRYPTION_KEY=$(openssl rand -base64 32)
 
-# 3. Start PostgreSQL
+# Start PostgreSQL and run the application
 docker-compose up -d postgres
-
-# 4. Run the application
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=demo
 ```
 
-### Dev mode (H2 in-memory, no Docker needed)
+### Option 2: Dev mode (no Docker needed)
 
 ```bash
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-### Run the test suite
+### Run tests
 
 ```bash
 ./mvnw test
 ```
 
+The API is available at `http://localhost:8080/api/v1/assets`.
+
 ---
 
 ## API Reference
 
-Base URL: `http://localhost:8080/api/v1/assets`
+All endpoints under `/api/v1/assets`:
 
-| Method | Endpoint | Description | Status |
-|--------|----------|-------------|--------|
-| `GET` | `/` | List all assets | 200 |
-| `GET` | `/{id}` | Get asset by ID | 200 |
-| `POST` | `/` | Create a new asset | 201 |
-| `PUT` | `/{id}/status` | Update asset status | 200 |
-| `PUT` | `/{id}/credentials` | Update SSH credentials | 200 |
-| `PUT` | `/{id}/ip` | Update IP address | 200 |
-| `DELETE` | `/{id}` | Delete asset | 204 |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | List all assets |
+| `GET` | `/{id}` | Get asset by ID |
+| `POST` | `/` | Create a new asset |
+| `PUT` | `/{id}/status` | Update asset status |
+| `PUT` | `/{id}/credentials` | Update SSH credentials |
+| `PUT` | `/{id}/ip` | Update IP address |
+| `DELETE` | `/{id}` | Delete asset |
 
 ### Example: Create an asset
 
@@ -126,62 +146,104 @@ Response — note that `password` is never returned:
 }
 ```
 
-### Asset types
+### Asset types and statuses
 
-| Value | Description |
-|-------|-------------|
-| `SERVER` | Physical or virtual server |
-| `ROUTER` | Network router or switch |
-| `IOT_DEVICE` | IoT or embedded device |
+**Types:** `SERVER` · `ROUTER` · `IOT_DEVICE`
 
-### Asset statuses
-
-| Value | Description |
-|-------|-------------|
-| `ACTIVE` | Asset is online and operational |
-| `INACTIVE` | Asset is offline |
-| `MAINTENANCE` | Asset is under maintenance |
+**Statuses:** `ACTIVE` · `INACTIVE` · `MAINTENANCE`
 
 ---
 
-## Environment Variables
+## Security Model
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `INFRATRACK_ENCRYPTION_KEY` | demo + prod | AES-256 key, 32 bytes, Base64-encoded |
-| `DATABASE_URL` | prod only | PostgreSQL connection URL |
-| `DATABASE_USER` | prod only | Database username |
-| `DATABASE_PASSWORD` | prod only | Database password |
+| Concern | Approach |
+|---------|----------|
+| Credentials at rest | AES-256-GCM encryption via JPA `AttributeConverter` |
+| Credentials in transit | HTTPS / TLS 1.3 |
+| Credentials in API responses | `AssetResponse` structurally has no password field |
+| Credentials in logs | `Credentials.toString()` omits sensitive data |
+| Key management | Environment variable (`INFRATRACK_ENCRYPTION_KEY`) |
 
-Generate a valid encryption key:
-
-```bash
-openssl rand -base64 32
-```
-
----
-
-## Project Roadmap
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 1 — Scaffolding | ✅ Complete | Hexagonal structure + Docker Compose |
-| 2 — CRUD + Encryption | ✅ Complete | Asset management + AES-256-GCM |
-| 3.1 — DTO Layer | ✅ Complete | Request/Response DTOs + Bean Validation |
-| 3.2 — Domain Events | 🔄 In progress | Event bus + mock metrics |
-| 4 — Real SSH | ⏳ Planned | Live connections to Alpine containers |
-| 5 — React Frontend | ⏳ Planned | Metrics dashboard |
-| 6 — CI/CD | ⏳ Planned | GitHub Actions + final polish |
+The encryption converter is transparent to the domain — it operates at the JPA layer, so business logic works with plain `Credentials` objects while persistence handles encryption automatically.
 
 ---
 
 ## Testing
 
-**57 tests passing** across domain, application, and REST layers.
+57 tests passing across three layers:
+
+| Layer | Strategy | Spring context |
+|-------|----------|----------------|
+| Domain | Pure unit tests — entities, value objects, validation | None |
+| Application | Mockito-based service tests | None |
+| REST | `@WebMvcTest` with mocked use cases | Slice |
+| Security | Verify passwords never appear in responses or `toString()` | Varies |
+
+```bash
+./mvnw test                          # All tests
+./mvnw test -Dtest=AssetServiceTest  # Specific class
+```
+
+---
+
+## Configuration
+
+### Environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `INFRATRACK_ENCRYPTION_KEY` | demo + prod | AES-256 key, 32 bytes, Base64-encoded |
+| `DATABASE_URL` | prod | PostgreSQL JDBC URL |
+| `DATABASE_USER` | prod | Database username |
+| `DATABASE_PASSWORD` | prod | Database password |
+
+### Profiles
+
+| Profile | Database | SSH | Best for |
+|---------|----------|-----|----------|
+| `dev` | H2 in-memory | Mock | Fast local iteration, no Docker |
+| `demo` | PostgreSQL (Docker) | Realistic mock | Integration testing, demonstrations |
+| `prod` | PostgreSQL (external) | Real SSHJ | Production deployment |
+
+---
+
+## Roadmap
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 1 — Scaffolding | ✅ | Hexagonal package structure, Docker Compose, profile system |
+| 2 — Asset CRUD + Encryption | ✅ | Full CRUD with AES-256-GCM encrypted credentials |
+| 3.1 — DTO Layer | ✅ | Request/Response DTOs with Bean Validation |
+| 3.2 — Domain Events | 🔜 | Async event bus with mock CPU/memory/disk metrics |
+| 4 — SSH Monitoring | ⏳ | Live SSH connections to containerized Alpine targets |
+| 5 — React Dashboard | ⏳ | Next.js 15 frontend with real-time metrics visualization |
+| 6 — CI/CD | ⏳ | GitHub Actions pipeline, Docker multi-stage builds |
+
+---
+
+## Project Structure
 
 ```
-Domain tests       → pure unit tests (no Spring context)
-Service tests      → Mockito only
-Controller tests   → @WebMvcTest (isolated HTTP layer)
-Security tests     → assert password never leaks into any response
+com.infratrack/
+├── domain/
+│   └── model/             Asset, AssetId, IpAddress, Credentials, enums
+│
+├── application/
+│   ├── port/input/        ManageAssetUseCase
+│   ├── port/output/       AssetRepository
+│   └── service/           AssetService
+│
+└── infrastructure/
+    ├── adapter/input/     AssetRestController
+    ├── adapter/input/dto/ CreateAssetRequest, AssetResponse, AssetDtoMapper
+    ├── adapter/output/    JpaAssetRepository, InMemoryAssetRepository
+    ├── config/            BeanConfiguration (explicit wiring, no @Service)
+    ├── persistence/       AssetJpaEntity, AssetMapper, schema.sql
+    └── security/          EncryptedStringConverter
 ```
+
+---
+
+## License
+
+This project is for demonstration and educational purposes.
