@@ -14,7 +14,7 @@ docker-compose up -d postgres
 
 # Build & test
 ./mvnw clean package          # Build JAR
-./mvnw test                   # Run all tests (57 passing)
+./mvnw test                   # Run all tests (58 passing)
 ./mvnw test -Dtest=<Class>    # Run a specific test class
 ```
 
@@ -25,17 +25,20 @@ Strict layer boundaries enforced by package structure. The domain has **zero fra
 ```
 com.infratrack/
 ├── domain/                → Pure Java. Asset entity, value objects (AssetId, IpAddress,
-│                            Credentials), domain logic. No Spring, no JPA.
+│   ├── model/               Credentials), domain logic. No Spring, no JPA.
+│   └── event/             → Domain events as plain Java records (AssetCreatedEvent,
+│                            AssetStatusChangedEvent, AssetDeletedEvent).
 │
 ├── application/           → Use cases and port interfaces. Framework-agnostic.
 │   ├── port/input/          ManageAssetUseCase (what the app exposes)
-│   ├── port/output/         AssetRepository (what the app requires)
-│   └── service/             AssetService (orchestrates use cases)
+│   ├── port/output/         AssetRepository, DomainEventPublisher (what the app requires)
+│   └── service/             AssetService (orchestrates use cases, publishes events)
 │
 └── infrastructure/        → Spring Boot, JPA, REST — all framework code lives here.
     ├── adapter/input/       AssetRestController (REST API)
     ├── adapter/input/dto/   Request/Response DTOs + AssetDtoMapper (HTTP ↔ Domain)
-    ├── adapter/output/      JpaAssetRepository, InMemoryAssetRepository
+    ├── adapter/output/      JpaAssetRepository, InMemoryAssetRepository,
+    │                        SpringEventPublisher, MockMetricsListener
     ├── config/              BeanConfiguration (profile-based wiring, no @Service)
     ├── persistence/         AssetJpaEntity, AssetMapper (Domain ↔ JPA), schema.sql
     └── security/            EncryptedStringConverter (AES-256-GCM)
@@ -44,51 +47,30 @@ com.infratrack/
 ### Design Principles
 
 - **Dependency Rule:** dependencies always point inward toward the domain.
-- **Factory methods over constructors:** `Asset.create()` for new entities, `Asset.reconstitute()` for persistence rehydration.
+- **Factory methods over constructors:** `Asset.create()` for new entities, `Asset.reconstitute()` for persistence rehydration. Events use `EventClass.of()` factory methods.
 - **Self-validating Value Objects:** `IpAddress`, `AssetId`, `Credentials` reject invalid state at construction.
 - **Security by construction:** `AssetResponse` has no `password` field — it is impossible to accidentally leak what does not exist.
 - **Explicit wiring:** beans are assembled in `BeanConfiguration`, not auto-detected via `@Service`. This makes the dependency graph visible and testable.
 - **Two mapper layers with distinct responsibilities:**
   - `AssetDtoMapper` — HTTP ↔ Domain (lives in `adapter/input/dto/`)
   - `AssetMapper` — Domain ↔ JPA (lives in `persistence/`)
+- **Domain events after persistence:** events are published only after the repository operation succeeds — never announce what hasn't happened.
 
 ## DTO Layer
 
 Request DTOs (inbound) use Bean Validation. Response DTOs enforce security invariants structurally.
 
-| DTO | Direction | Purpose |
-|-----|-----------|---------|
-| `CreateAssetRequest` | Request | Name, type, IP, credentials |
-| `UpdateStatusRequest` | Request | `ACTIVE` · `INACTIVE` · `MAINTENANCE` |
-| `UpdateCredentialsRequest` | Request | New username + password |
-| `UpdateIpAddressRequest` | Request | New IP address |
-| `AssetResponse` | Response | All asset fields **except** password |
+## Domain Events
 
-`ManageAssetUseCase.createAsset(Asset)` accepts a fully-built domain object — construction is the mapper's responsibility, not the use case's.
+Three domain events published by `AssetService` through the `DomainEventPublisher` port:
 
-## API
+| Event | Published after | Payload |
+|-------|----------------|---------|
+| `AssetCreatedEvent` | `createAsset()` | AssetId, AssetType, timestamp |
+| `AssetStatusChangedEvent` | `updateAssetStatus()` | AssetId, AssetStatus, timestamp |
+| `AssetDeletedEvent` | `deleteAsset()` | AssetId, timestamp |
 
-All endpoints under `/api/v1/assets`. Write operations accept `@RequestBody` with typed DTOs:
-
-| Method | Path | Body | Response |
-|--------|------|------|----------|
-| `GET` | `/` | — | `List<AssetResponse>` |
-| `GET` | `/{id}` | — | `AssetResponse` |
-| `POST` | `/` | `CreateAssetRequest` | `AssetResponse` (201) |
-| `PUT` | `/{id}/status` | `UpdateStatusRequest` | `AssetResponse` |
-| `PUT` | `/{id}/credentials` | `UpdateCredentialsRequest` | `AssetResponse` |
-| `PUT` | `/{id}/ip` | `UpdateIpAddressRequest` | `AssetResponse` |
-| `DELETE` | `/{id}` | — | 204 No Content |
-
-## Profiles
-
-| Profile | Database | SSH | DDL Strategy | Purpose |
-|---------|----------|-----|--------------|---------|
-| `dev` | H2 in-memory | Mock | `create-drop` | Fast local iteration |
-| `demo` | PostgreSQL 17 | Realistic mock | `validate` | Integration tests, live demos |
-| `prod` | PostgreSQL (env) | Real (SSHJ) | `validate` | Production |
-
-Schema is managed manually via `src/main/resources/schema.sql` with `spring.sql.init.mode=always`.
+Events are plain Java records — no Spring, no JPA. `SpringEventPublisher` implements the port using `ApplicationEventPublisher`. `MockMetricsListener` reacts to `AssetCreatedEvent` generating simulated CPU/memory/disk metrics.
 
 ## Security
 
@@ -102,12 +84,12 @@ Schema is managed manually via `src/main/resources/schema.sql` with `spring.sql.
 
 ## Testing Strategy
 
-57 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
+58 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
 
 | Layer | Approach | Spring context? |
 |-------|----------|-----------------|
 | Domain | Pure unit tests on entities and value objects | No |
-| Service | Mockito (`@ExtendWith(MockitoExtension.class)`) | No |
+| Service | Mockito (`@ExtendWith(MockitoExtension.class)`) with mock publisher | No |
 | Controller | `@WebMvcTest` + `@MockitoBean` | Slice only |
 | Security | Assert password never appears in responses or `toString()` | Varies |
 
@@ -126,7 +108,7 @@ Schema is managed manually via `src/main/resources/schema.sql` with `spring.sql.
 | 1 — Scaffolding | ✅ Done | Hexagonal structure, Docker Compose, three profiles |
 | 2 — Asset CRUD | ✅ Done | Full CRUD, AES-256-GCM encryption end-to-end |
 | 3.1 — DTO Layer | ✅ Done | Request/Response DTOs, Bean Validation, security-by-construction |
-| 3.2 — Domain Events | 🔜 Next | Event publishing, mock metrics, async Virtual Threads |
+| 3.2 — Domain Events | ✅ Done | Event publishing, mock metrics, `DomainEventPublisher` port |
 | 4 — SSH Monitoring | Planned | Real SSH connections to containerized targets |
 | 5 — React Dashboard | Planned | Next.js 15 frontend with live metrics |
 | 6 — CI/CD | Planned | GitHub Actions pipeline, final polish |
@@ -147,4 +129,11 @@ These do not affect the public documentation above.
   but is NOT registered as a @Bean — it's instantiated manually via
   `new JpaAssetRepository(springRepo)` to avoid duplicate bean conflicts.
 • MapStruct adoption is deferred to Phase 4+ — manual mappers are intentional for now.
+• SpringEventPublisher uses @Component (auto-detected by Spring), not explicit wiring in
+  BeanConfiguration. This is intentional — it's a simple infrastructure adapter with no
+  profile-specific behavior, unlike repositories.
+• MockMetricsListener also uses @Component. Future: profile-restrict to dev/demo only
+  when real SSH metrics exist in prod.
+• AssetService constructor now takes two params: (AssetRepository, DomainEventPublisher).
+  BeanConfiguration wires both. Tests mock both.
 -->

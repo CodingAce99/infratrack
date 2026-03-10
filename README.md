@@ -11,10 +11,11 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 ## Highlights
 
 - **Hexagonal Architecture** — Domain layer with zero framework dependencies. Swappable adapters for REST, JPA, SSH, and in-memory storage.
+- **Domain Events** — Async event bus decouples asset lifecycle from reactions (metrics, auditing, notifications). Events are pure Java records; listeners are infrastructure adapters. Adding new reactions requires zero changes to the domain or service layer.
 - **Security by construction** — SSH credentials encrypted with AES-256-GCM at rest. API responses structurally cannot contain passwords (`AssetResponse` has no password field — not hidden, *absent*).
 - **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + simulated data), `prod` (real infrastructure).
 - **Virtual Threads** — Java 21 Virtual Threads enabled for non-blocking I/O across SSH connections and async event processing.
-- **57 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
+- **58 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
 
 ---
 
@@ -53,11 +54,15 @@ Infratrack bridges the gap between physical inventory and the logical state of a
                     │  │ UseCase │───▶│  Repository    │    │
                     │  │ (Port)  │    │  (Port)        │    │
                     │  └────┬────┘    └────────────────┘    │
+                    │       │                               │
+                    │       ├───▶ DomainEventPublisher (Port)│
                     │       │          APPLICATION          │
                     ├───────┼───────────────────────────────┤
                     │       ▼                               │
                     │   Asset  ·  IpAddress  ·  Credentials │
                     │   AssetId ·  AssetType  · AssetStatus │
+                    │   AssetCreatedEvent · AssetDeletedEvent│
+                    │   AssetStatusChangedEvent              │
                     │              DOMAIN                   │
                     └───────────────────────────────────────┘
 ```
@@ -65,6 +70,16 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 The **Dependency Rule** is strictly enforced: all dependencies point inward. The domain knows nothing about Spring, JPA, or HTTP. Value objects (`IpAddress`, `Credentials`, `AssetId`) are self-validating and immutable. Domain entities use factory methods (`Asset.create()`, `Asset.reconstitute()`) instead of public constructors.
 
 Two dedicated mapper layers keep concerns separated: `AssetDtoMapper` translates between HTTP and the domain, while `AssetMapper` translates between the domain and JPA entities.
+
+### Domain Events
+
+Asset lifecycle changes publish domain events through a port interface (`DomainEventPublisher`). The domain defines the events as plain Java records; infrastructure adapters implement publishing (via Spring `ApplicationEventPublisher`) and listening. This decouples the service from any downstream reactions — adding a new listener requires zero changes to existing code.
+
+| Event | Trigger | Data |
+|-------|---------|------|
+| `AssetCreatedEvent` | Asset successfully persisted | AssetId, AssetType, timestamp |
+| `AssetStatusChangedEvent` | Status updated | AssetId, new AssetStatus, timestamp |
+| `AssetDeletedEvent` | Asset removed | AssetId, timestamp |
 
 ---
 
@@ -170,12 +185,12 @@ The encryption converter is transparent to the domain — it operates at the JPA
 
 ## Testing
 
-57 tests passing across three layers:
+58 tests passing across four layers:
 
 | Layer | Strategy | Spring context |
 |-------|----------|----------------|
 | Domain | Pure unit tests — entities, value objects, validation | None |
-| Application | Mockito-based service tests | None |
+| Application | Mockito-based service tests with mock publisher | None |
 | REST | `@WebMvcTest` with mocked use cases | Slice |
 | Security | Verify passwords never appear in responses or `toString()` | Varies |
 
@@ -214,8 +229,8 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | 1 — Scaffolding | ✅ | Hexagonal package structure, Docker Compose, profile system |
 | 2 — Asset CRUD + Encryption | ✅ | Full CRUD with AES-256-GCM encrypted credentials |
 | 3.1 — DTO Layer | ✅ | Request/Response DTOs with Bean Validation |
-| 3.2 — Domain Events | 🔜 | Async event bus with mock CPU/memory/disk metrics |
-| 4 — SSH Monitoring | ⏳ | Live SSH connections to containerized Alpine targets |
+| 3.2 — Domain Events | ✅ | Domain event bus with mock CPU/memory/disk metrics |
+| 4 — SSH Monitoring | 🔜 | Live SSH connections to containerized Alpine targets |
 | 5 — React Dashboard | ⏳ | Next.js 15 frontend with real-time metrics visualization |
 | 6 — CI/CD | ⏳ | GitHub Actions pipeline, Docker multi-stage builds |
 
@@ -226,17 +241,19 @@ The encryption converter is transparent to the domain — it operates at the JPA
 ```
 com.infratrack/
 ├── domain/
-│   └── model/             Asset, AssetId, IpAddress, Credentials, enums
+│   ├── model/             Asset, AssetId, IpAddress, Credentials, enums
+│   └── event/             AssetCreatedEvent, AssetStatusChangedEvent, AssetDeletedEvent
 │
 ├── application/
 │   ├── port/input/        ManageAssetUseCase
-│   ├── port/output/       AssetRepository
+│   ├── port/output/       AssetRepository, DomainEventPublisher
 │   └── service/           AssetService
 │
 └── infrastructure/
     ├── adapter/input/     AssetRestController
     ├── adapter/input/dto/ CreateAssetRequest, AssetResponse, AssetDtoMapper
-    ├── adapter/output/    JpaAssetRepository, InMemoryAssetRepository
+    ├── adapter/output/    JpaAssetRepository, InMemoryAssetRepository,
+    │                      SpringEventPublisher, MockMetricsListener
     ├── config/            BeanConfiguration (explicit wiring, no @Service)
     ├── persistence/       AssetJpaEntity, AssetMapper, schema.sql
     └── security/          EncryptedStringConverter
