@@ -1,6 +1,8 @@
 package com.infratrack.application.service;
 
 import com.infratrack.application.port.output.AssetRepository;
+import com.infratrack.application.port.output.DomainEventPublisher;
+import com.infratrack.domain.event.AssetCreatedEvent;
 import com.infratrack.domain.model.Asset;
 import com.infratrack.domain.model.AssetId;
 import com.infratrack.domain.model.AssetStatus;
@@ -29,11 +31,14 @@ class AssetServiceTest {
     @Mock
     private AssetRepository assetRepository;
 
+    @Mock
+    private DomainEventPublisher publisher;
+
     private AssetService assetService;
 
     @BeforeEach
     void setUp() {
-        assetService = new AssetService(assetRepository);
+        assetService = new AssetService(assetRepository, publisher);
     }
 
     // -------------------------------------------------------------------------
@@ -60,7 +65,13 @@ class AssetServiceTest {
         @Test
         @DisplayName("debe lanzar NullPointerException si AssetRepository es null")
         void constructor_shouldThrowNullPointerException_whenRepositoryIsNull() {
-            assertThrows(NullPointerException.class, () -> new AssetService(null));
+            assertThrows(NullPointerException.class, () -> new AssetService(null, publisher));
+        }
+
+        @Test
+        @DisplayName("debe lanzar NullPointerException si DomainEventPublisher es null")
+        void constructor_shouldThrowNullPointerException_whenPublisherIsNull() {
+            assertThrows(NullPointerException.class, () -> new AssetService(assetRepository, null));
         }
     }
 
@@ -83,6 +94,8 @@ class AssetServiceTest {
             assertEquals("Core Router", result.getName());
             assertEquals(AssetStatus.ACTIVE, result.getStatus());
             verify(assetRepository, times(1)).save(result);
+            verify(publisher, times(1)).publish(any(AssetCreatedEvent.class));
+
         }
     }
 
@@ -270,4 +283,5 @@ class AssetServiceTest {
         }
     }
 }
+
 

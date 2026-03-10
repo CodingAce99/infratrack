@@ -17,6 +17,7 @@ public class JpaAssetRepository implements AssetRepository {
 
     private final SpringDataAssetRepository springRepo;
 
+    // Inyección por constructor - Objects requireNonNull
     public JpaAssetRepository(SpringDataAssetRepository springRepo) {
         this.springRepo = Objects.requireNonNull(springRepo, "SpringDataAssetRepository cannot be null");
     }

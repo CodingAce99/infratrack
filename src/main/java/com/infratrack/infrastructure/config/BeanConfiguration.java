@@ -2,6 +2,7 @@ package com.infratrack.infrastructure.config;
 
 import com.infratrack.application.port.input.ManageAssetUseCase;
 import com.infratrack.application.port.output.AssetRepository;
+import com.infratrack.application.port.output.DomainEventPublisher;
 import com.infratrack.application.service.AssetService;
 import com.infratrack.infrastructure.adapter.output.InMemoryAssetRepository;
 import com.infratrack.infrastructure.adapter.output.JpaAssetRepository;
@@ -26,8 +27,8 @@ public class BeanConfiguration {
     }
 
     @Bean
-    public ManageAssetUseCase manageAssetUseCase(AssetRepository assetRepository) {
-        return new AssetService(assetRepository);
+    public ManageAssetUseCase manageAssetUseCase(AssetRepository assetRepository, DomainEventPublisher domainEventPublisher) {
+        return new AssetService(assetRepository, domainEventPublisher);
     }
 }
 
