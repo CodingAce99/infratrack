@@ -84,7 +84,7 @@ Events are plain Java records — no Spring, no JPA. `SpringEventPublisher` impl
 
 ## Testing Strategy
 
-58 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
+67 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
 
 | Layer | Approach | Spring context? |
 |-------|----------|-----------------|
@@ -109,7 +109,9 @@ Events are plain Java records — no Spring, no JPA. `SpringEventPublisher` impl
 | 2 — Asset CRUD | ✅ Done | Full CRUD, AES-256-GCM encryption end-to-end |
 | 3.1 — DTO Layer | ✅ Done | Request/Response DTOs, Bean Validation, security-by-construction |
 | 3.2 — Domain Events | ✅ Done | Event publishing, mock metrics, `DomainEventPublisher` port |
-| 4 — SSH Monitoring | Planned | Real SSH connections to containerized targets |
+| 4.1 — Metrics Domain | ✅ Done | MetricSnapshot VO, MonitoringService, JPA layer, mock collector, 67 tests |
+| 4.2 — SSH Real | Planned | SSHJ + Alpine containers |
+| 4.3 — Scheduling + REST | Planned | Virtual Threads, GET /metrics endpoints |
 | 5 — React Dashboard | Planned | Next.js 15 frontend with live metrics |
 | 6 — CI/CD | Planned | GitHub Actions pipeline, final polish |
 
@@ -132,8 +134,12 @@ These do not affect the public documentation above.
 • SpringEventPublisher uses @Component (auto-detected by Spring), not explicit wiring in
   BeanConfiguration. This is intentional — it's a simple infrastructure adapter with no
   profile-specific behavior, unlike repositories.
-• MockMetricsListener also uses @Component. Future: profile-restrict to dev/demo only
-  when real SSH metrics exist in prod.
+• MockMetricsListener removed in Sprint 4.1 — replaced by MonitoringService + MockMetricsCollector.
+• MockMetricsCollector uses @Component (auto-detected). Will be profile-restricted in Sprint 4.2
+  when SshMetricsCollector is added for demo+prod.
+• InMemoryMetricsSnapshotRepository (note: class name has plural 'Metrics') registered as
+  MetricSnapshotRepository bean for dev profile in BeanConfiguration.
+• MonitoringService constructor: (AssetRepository, MetricsCollector, MetricSnapshotRepository).
 • AssetService constructor now takes two params: (AssetRepository, DomainEventPublisher).
   BeanConfiguration wires both. Tests mock both.
 -->

@@ -185,7 +185,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 
 ## Testing
 
-58 tests passing across four layers:
+67 tests passing across four layers:
 
 | Layer | Strategy | Spring context |
 |-------|----------|----------------|
@@ -226,13 +226,12 @@ The encryption converter is transparent to the domain — it operates at the JPA
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| 1 — Scaffolding | ✅ | Hexagonal package structure, Docker Compose, profile system |
-| 2 — Asset CRUD + Encryption | ✅ | Full CRUD with AES-256-GCM encrypted credentials |
-| 3.1 — DTO Layer | ✅ | Request/Response DTOs with Bean Validation |
-| 3.2 — Domain Events | ✅ | Domain event bus with mock CPU/memory/disk metrics |
-| 4 — SSH Monitoring | 🔜 | Live SSH connections to containerized Alpine targets |
-| 5 — React Dashboard | ⏳ | Next.js 15 frontend with real-time metrics visualization |
-| 6 — CI/CD | ⏳ | GitHub Actions pipeline, Docker multi-stage builds |
+| 1 — Scaffolding | ✅ Done | Hexagonal package structure, Docker Compose, profile system |
+| 2 — Asset CRUD + Encryption | ✅ Done | Full CRUD with AES-256-GCM encrypted credentials |
+| 3 — DTO Layer + Domain Events | ✅ Done | Request/Response DTOs, Bean Validation, event bus |
+| 4 — SSH Monitoring | 🔄 In progress | Metrics collection, persistence, SSH connections, REST API |
+| 5 — React Dashboard | ⏳ Planned | Next.js 15 frontend with real-time metrics visualization |
+| 6 — CI/CD | ⏳ Planned | GitHub Actions pipeline, Docker multi-stage builds |
 
 ---
 
@@ -253,9 +252,12 @@ com.infratrack/
     ├── adapter/input/     AssetRestController
     ├── adapter/input/dto/ CreateAssetRequest, AssetResponse, AssetDtoMapper
     ├── adapter/output/    JpaAssetRepository, InMemoryAssetRepository,
-    │                      SpringEventPublisher, MockMetricsListener
+    │                      SpringEventPublisher, MockMetricsCollector,
+    │                      JpaMetricSnapshotRepository, InMemoryMetricsSnapshotRepository
     ├── config/            BeanConfiguration (explicit wiring, no @Service)
-    ├── persistence/       AssetJpaEntity, AssetMapper, schema.sql
+    ├── persistence/       AssetJpaEntity, AssetMapper,
+    │                      MetricSnapshotJpaEntity, MetricSnapshotMapper,
+    │                      SpringDataMetricSnapshotRepository, schema.sql
     └── security/          EncryptedStringConverter
 ```
 
