@@ -253,7 +253,7 @@ com.infratrack/
     ├── adapter/input/dto/ CreateAssetRequest, AssetResponse, AssetDtoMapper
     ├── adapter/output/    JpaAssetRepository, InMemoryAssetRepository,
     │                      SpringEventPublisher, MockMetricsCollector,
-    │                      JpaMetricSnapshotRepository, InMemoryMetricsSnapshotRepository
+    │                      JpaMetricSnapshotRepository, InMemoryMetricSnapshotRepository
     ├── config/            BeanConfiguration (explicit wiring, no @Service)
     ├── persistence/       AssetJpaEntity, AssetMapper,
     │                      MetricSnapshotJpaEntity, MetricSnapshotMapper,

@@ -9,6 +9,7 @@ import com.infratrack.domain.model.AssetId;
 import com.infratrack.domain.model.MetricSnapshot;
 
 import java.util.List;
+import java.util.Objects;
 
 public class MonitoringService implements MonitorAssetUseCase {
 
@@ -21,9 +22,9 @@ public class MonitoringService implements MonitorAssetUseCase {
             MetricsCollector metricsCollector,
             MetricSnapshotRepository snapshotRepository
     ) {
-        this.assetRepository = assetRepository;
-        this.metricsCollector = metricsCollector;
-        this.snapshotRepository = snapshotRepository;
+        this.assetRepository = Objects.requireNonNull(assetRepository, "assetRepository cannot be null");
+        this.metricsCollector = Objects.requireNonNull(metricsCollector, "metricsCollector cannot be null");
+        this.snapshotRepository = Objects.requireNonNull(snapshotRepository, "snapshotRepository cannot be null");
     }
 
     @Override

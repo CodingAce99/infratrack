@@ -3,11 +3,9 @@ package com.infratrack.infrastructure.adapter.output;
 import com.infratrack.application.port.output.MetricsCollector;
 import com.infratrack.domain.model.Asset;
 import com.infratrack.domain.model.MetricSnapshot;
-import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ThreadLocalRandom;
 
-@Component
 public class MockMetricsCollector implements MetricsCollector {
 
     @Override

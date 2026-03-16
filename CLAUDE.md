@@ -137,7 +137,7 @@ These do not affect the public documentation above.
 • MockMetricsListener removed in Sprint 4.1 — replaced by MonitoringService + MockMetricsCollector.
 • MockMetricsCollector uses @Component (auto-detected). Will be profile-restricted in Sprint 4.2
   when SshMetricsCollector is added for demo+prod.
-• InMemoryMetricsSnapshotRepository (note: class name has plural 'Metrics') registered as
+• InMemoryMetricSnapshotRepository registered as
   MetricSnapshotRepository bean for dev profile in BeanConfiguration.
 • MonitoringService constructor: (AssetRepository, MetricsCollector, MetricSnapshotRepository).
 • AssetService constructor now takes two params: (AssetRepository, DomainEventPublisher).

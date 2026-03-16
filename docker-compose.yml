@@ -22,38 +22,14 @@ services:
     networks:
       - infratrack-network
 
-  # Application (commented out for now - will enable when we have code to run)
-  # app:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   container_name: infratrack-app
-  #   ports:
-  #     - "8080:8080"
-  #   environment:
-  #     SPRING_PROFILES_ACTIVE: demo
-  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/infratrack
-  #     SPRING_DATASOURCE_USERNAME: infratrack_user
-  #     SPRING_DATASOURCE_PASSWORD: infratrack_pass
-  #     INFRATRACK_ENCRYPTION_KEY: changeme-32-character-key
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   networks:
-  #     - infratrack-network
-
-  # SSH test server (for Phase 4 testing)
-  # ssh-server-test:
-  #   image: linuxserver/openssh-server:latest
-  #   container_name: infratrack-ssh-test
-  #   ports:
-  #     - "2222:2222"
-  #   environment:
-  #     PASSWORD_ACCESS: "true"
-  #     USER_NAME: testuser
-  #     USER_PASSWORD: testpass
-  #   networks:
-  #     - infratrack-network
+  ssh-target-1:
+    build: ./docker/alpine-ssh
+    container_name: infratrack-ssh-target-1
+    hostname: web-server-01
+    ports:
+      - "2222:22"
+    networks:
+      - infratrack-network
 
 networks:
   infratrack-network:

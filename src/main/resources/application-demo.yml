@@ -43,6 +43,7 @@ infratrack:
     mock:
       enabled: true
       simulate-metrics: true
+    port: 2222
   
   # Auto-generar datos de demo al iniciar
   demo:

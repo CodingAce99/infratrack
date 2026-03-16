@@ -7,7 +7,7 @@ import com.infratrack.domain.model.MetricSnapshot;
 import java.util.ArrayList;
 import java.util.List;
 
-public class InMemoryMetricsSnapshotRepository implements MetricSnapshotRepository {
+public class InMemoryMetricSnapshotRepository implements MetricSnapshotRepository {
 
     private final List<MetricSnapshot> store = new ArrayList<>();
 

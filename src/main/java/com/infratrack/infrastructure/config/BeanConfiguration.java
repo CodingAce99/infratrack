@@ -8,12 +8,10 @@ import com.infratrack.application.port.output.MetricSnapshotRepository;
 import com.infratrack.application.port.output.MetricsCollector;
 import com.infratrack.application.service.AssetService;
 import com.infratrack.application.service.MonitoringService;
-import com.infratrack.infrastructure.adapter.output.InMemoryAssetRepository;
-import com.infratrack.infrastructure.adapter.output.InMemoryMetricsSnapshotRepository;
-import com.infratrack.infrastructure.adapter.output.JpaAssetRepository;
-import com.infratrack.infrastructure.adapter.output.JpaMetricSnapshotRepository;
+import com.infratrack.infrastructure.adapter.output.*;
 import com.infratrack.infrastructure.persistence.SpringDataAssetRepository;
 import com.infratrack.infrastructure.persistence.SpringDataMetricSnapshotRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -43,7 +41,7 @@ public class BeanConfiguration {
     @Bean
     @Profile("dev")
     public MetricSnapshotRepository inMemoryMetricSnapshotRepository() {
-        return new InMemoryMetricsSnapshotRepository();
+        return new InMemoryMetricSnapshotRepository();
     }
 
     @Bean
@@ -59,6 +57,19 @@ public class BeanConfiguration {
             MetricsCollector metricsCollector,
             MetricSnapshotRepository metricSnapshotRepository) {
         return new MonitoringService(assetRepository, metricsCollector, metricSnapshotRepository);
+    }
+
+    @Bean
+    @Profile("dev")
+    public MetricsCollector mockMetricsCollector() {
+        return new MockMetricsCollector();
+    }
+
+    @Bean
+    @Profile({"demo", "prod"})
+    public MetricsCollector sshMetricsCollector(
+            @Value("${infratrack.ssh.port:22}") int sshPort) {
+        return new SshMetricsCollector(sshPort);
     }
 }
 

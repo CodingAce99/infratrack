@@ -6,7 +6,7 @@ import com.infratrack.domain.model.AssetStatus;
 import com.infratrack.domain.model.AssetType;
 import com.infratrack.domain.model.Credentials;
 import com.infratrack.domain.model.IpAddress;
-// Mapea Dominio <-> JPA Entity
+// Mapper Domain <-> JPA Entity
 public final class AssetMapper {
 
     private AssetMapper() {
