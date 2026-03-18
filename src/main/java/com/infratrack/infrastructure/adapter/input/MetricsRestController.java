@@ -10,8 +10,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Objects;
 
-import static org.springframework.data.jpa.domain.AbstractPersistable_.id;
-
 @RestController
 @RequestMapping("/api/v1/assets")
 public class MetricsRestController {
@@ -22,7 +20,7 @@ public class MetricsRestController {
         this.monitorUseCase = Objects.requireNonNull(monitorUseCase, "MonitorAssetUseCase cannot be null");
     }
 
-    @GetMapping("{id}/metrics")
+    @GetMapping("/{id}/metrics")
     public ResponseEntity<MetricSnapshotResponse> getLatestMetrics(@PathVariable String id) {
         List<MetricSnapshot> snapshots = monitorUseCase.getHistory(AssetId.of(id), 1);
         return snapshots.isEmpty()

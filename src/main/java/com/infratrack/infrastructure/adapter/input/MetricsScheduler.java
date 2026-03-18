@@ -2,7 +2,6 @@ package com.infratrack.infrastructure.adapter.input;
 
 
 import com.infratrack.application.port.input.MonitorAssetUseCase;
-import com.infratrack.application.service.MonitoringService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,7 +16,7 @@ public class MetricsScheduler {
 
     private final MonitorAssetUseCase monitorUseCase;
 
-    private MetricsScheduler(MonitoringService monitorUseCase) {
+    public MetricsScheduler(MonitorAssetUseCase monitorUseCase) {
         this.monitorUseCase = Objects.requireNonNull(monitorUseCase, "MonitorAssetUseCase cannot be null");
     }
 
