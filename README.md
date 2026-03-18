@@ -11,10 +11,11 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 ## Highlights
 
 - **Hexagonal Architecture** — Domain layer with zero framework dependencies. Swappable adapters for REST, JPA, SSH, and in-memory storage.
-- **Domain Events** — Async event bus decouples asset lifecycle from reactions (metrics, auditing, notifications). Events are pure Java records; listeners are infrastructure adapters. Adding new reactions requires zero changes to the domain or service layer.
+- **SSH Monitoring** — Proactive metric collection via SSHJ. A scheduler connects to assets over SSH, extracts CPU/memory/disk metrics, and persists historical data — all parallelized with Virtual Threads.
+- **Domain Events** — Async event bus decouples asset lifecycle from downstream reactions. Events are pure Java records; adding new listeners requires zero changes to existing code.
 - **Security by construction** — SSH credentials encrypted with AES-256-GCM at rest. API responses structurally cannot contain passwords (`AssetResponse` has no password field — not hidden, *absent*).
-- **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + simulated data), `prod` (real infrastructure).
-- **Virtual Threads** — Java 21 Virtual Threads enabled for non-blocking I/O across SSH connections and async event processing.
+- **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + real SSH to Alpine containers), `prod` (real infrastructure).
+- **Virtual Threads** — Java 21 Virtual Threads for non-blocking parallel SSH collection with per-asset fault isolation.
 - **81 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
 
 ---
@@ -27,7 +28,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 | Framework | Spring Boot 3.5 |
 | Database | PostgreSQL 17 (Docker) |
 | Encryption | AES-256-GCM via JPA AttributeConverter |
-| SSH | SSHJ 0.40 *(upcoming)* |
+| SSH | SSHJ 0.40.0 |
 | Frontend | React 19 + Next.js 15 *(upcoming)* |
 | Infrastructure | Docker Compose, GitHub Actions |
 | Testing | JUnit 5, Mockito |
@@ -36,40 +37,66 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 
 ## Architecture
 
+Infratrack follows **Hexagonal Architecture** (Ports & Adapters) with two distinct data flows: asset management (HTTP-driven) and monitoring (time-driven).
+
+**Asset Management Flow**
+
 ```
-                    ┌───────────────────────────────────────┐
-                    │           INFRASTRUCTURE              │
-                    │                                       │
-   HTTP Request ──▶ │  REST Controller                      │
-                    │       │                               │
-                    │       ▼                               │
-                    │  ┌─────────┐    ┌────────────────┐    │
-                    │  │DTO Layer│    │  JPA Adapter   │    │
-                    │  │ Mapper  │    │  (PostgreSQL)  │    │
-                    │  └────┬────┘    └───────▲────────┘    │
-                    │       │                 │             │
-                    ├───────┼─────────────────┼─────────────┤
-                    │       ▼                 │             │
-                    │  ┌─────────┐    ┌───────┴────────┐    │
-                    │  │ UseCase │───▶│  Repository    │    │
-                    │  │ (Port)  │    │  (Port)        │    │
-                    │  └────┬────┘    └────────────────┘    │
-                    │       │                               │
-                    │       ├───▶ DomainEventPublisher (Port)│
-                    │       │          APPLICATION          │
-                    ├───────┼───────────────────────────────┤
-                    │       ▼                               │
-                    │   Asset  ·  IpAddress  ·  Credentials │
-                    │   AssetId ·  AssetType  · AssetStatus │
-                    │   AssetCreatedEvent · AssetDeletedEvent│
-                    │   AssetStatusChangedEvent              │
-                    │              DOMAIN                   │
-                    └───────────────────────────────────────┘
+HTTP ──▶ AssetRestController ──▶ AssetDtoMapper
+                                        │
+                ┌───────────────────────────────────────┐
+                │            APPLICATION                │
+                │                                       │
+                │   ManageAssetUseCase ──▶ AssetService  │
+                │         │                    │        │
+                │         │           AssetRepository   │
+                │         │           (output port)     │
+                │         │                    │        │
+                │         ▼                    │        │
+                │   DomainEventPublisher       │        │
+                │    (output port)             │        │
+                └──────────┼───────────────────┼────────┘
+                           │                   │
+                ┌──────────▼───────────────────▼────────┐
+                │         SpringEventPublisher          │
+                │         JpaAssetRepository            │
+                │              INFRASTRUCTURE           │
+                └───────────────────────────────────────┘
+```
+
+**Monitoring Flow**
+
+```
+@Scheduled ──▶ MetricsScheduler
+                       │
+                ┌──────▼────────────────────────────────┐
+                │            APPLICATION                │
+                │                                       │
+                │  MonitorAssetUseCase ──▶ MonitoringService
+                │        │                 │           │
+                │        │        MetricsCollector      │
+                │        │         (output port)        │
+                │        │                 │            │
+                │        │     MetricSnapshotRepository │
+                │        │         (output port)        │
+                └────────┼─────────────────┼────────────┘
+                         │                 │
+                ┌────────▼─────────────────▼────────────┐
+                │  SshMetricsCollector ──▶ Alpine (SSH)  │
+                │  JpaMetricSnapshotRepository ──▶ PG    │
+                │              INFRASTRUCTURE           │
+                └───────────────────────────────────────┘
+
+   HTTP ──▶ MetricsRestController ──▶ MonitorAssetUseCase.getHistory()
 ```
 
 The **Dependency Rule** is strictly enforced: all dependencies point inward. The domain knows nothing about Spring, JPA, or HTTP. Value objects (`IpAddress`, `Credentials`, `AssetId`) are self-validating and immutable. Domain entities use factory methods (`Asset.create()`, `Asset.reconstitute()`) instead of public constructors.
 
 Two dedicated mapper layers keep concerns separated: `AssetDtoMapper` translates between HTTP and the domain, while `AssetMapper` translates between the domain and JPA entities.
+
+**Virtual Threads**
+
+The monitoring scheduler collects metrics from all active assets in parallel using Java 21 Virtual Threads. Each SSH connection runs in its own Virtual Thread via `Thread.startVirtualThread()` — lightweight, non-blocking, and with per-asset fault isolation. A single failed connection never blocks the collection of other assets.
 
 ### Domain Events
 
@@ -88,7 +115,7 @@ Asset lifecycle changes publish domain events through a port interface (`DomainE
 ### Prerequisites
 
 - **Java 21** — [Eclipse Temurin](https://adoptium.net/)
-- **Docker Desktop** — for PostgreSQL in demo/prod profiles
+- **Docker Desktop** — for PostgreSQL and SSH targets in demo/prod profiles
 
 ### Option 1: Demo mode (recommended for evaluation)
 
@@ -99,9 +126,23 @@ cd infratrack
 # Generate an encryption key
 export INFRATRACK_ENCRYPTION_KEY=$(openssl rand -base64 32)
 
-# Start PostgreSQL and run the application
-docker-compose up -d postgres
+# Start PostgreSQL and SSH target, then run the application
+docker-compose up -d
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=demo
+```
+
+Create a demo asset pointing to the SSH target:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/assets \
+  -H "Content-Type: application/json" \
+  -d '{"name":"web-server-01","type":"SERVER","ipAddress":"127.0.0.1","username":"sshuser","password":"sshpass"}'
+```
+
+Wait 60 seconds for the scheduler to collect metrics, then query:
+
+```bash
+curl http://localhost:8080/api/v1/assets/{id}/metrics/history
 ```
 
 ### Option 2: Dev mode (no Docker needed)
@@ -199,7 +240,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | Layer | Strategy | Spring context |
 |-------|----------|----------------|
 | Domain | Pure unit tests — entities, value objects, validation | None |
-| Application | Mockito-based service tests with mock publisher | None |
+| Application | Mockito-based service tests with mocked ports | None |
 | REST | `@WebMvcTest` with mocked use cases | Slice |
 | Security | Verify passwords never appear in responses or `toString()` | Varies |
 
@@ -226,20 +267,20 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | Profile | Database | SSH | Best for |
 |---------|----------|-----|----------|
 | `dev` | H2 in-memory | Mock | Fast local iteration, no Docker |
-| `demo` | PostgreSQL (Docker) | Realistic mock | Integration testing, demonstrations |
+| `demo` | PostgreSQL (Docker) | Real SSH to Alpine containers | Recruiter demos, integration testing |
 | `prod` | PostgreSQL (external) | Real SSHJ | Production deployment |
 
 ---
 
 ## Roadmap
 
-| Phase | Status    | Description |
-|-------|-----------|-------------|
-| 1 — Scaffolding | ✅ Done    | Hexagonal package structure, Docker Compose, profile system |
-| 2 — Asset CRUD + Encryption | ✅ Done    | Full CRUD with AES-256-GCM encrypted credentials |
-| 3 — DTO Layer + Domain Events | ✅ Done    | Request/Response DTOs, Bean Validation, event bus |
-| 4 — SSH Monitoring | ✅ Done    | Metrics collection, persistence, SSH connections, REST API |
-| 5 — React Dashboard | 🔄 Soon   | Next.js 15 frontend with real-time metrics visualization |
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 1 — Scaffolding | ✅ Done | Hexagonal package structure, Docker Compose, profile system |
+| 2 — Asset CRUD + Encryption | ✅ Done | Full CRUD with AES-256-GCM encrypted credentials |
+| 3 — DTO Layer + Domain Events | ✅ Done | Request/Response DTOs, Bean Validation, event bus |
+| 4 — SSH Monitoring | ✅ Done | Metrics collection, persistence, SSH connections, REST API |
+| 5 — React Dashboard | 🔄 Soon | Next.js 15 frontend with real-time metrics visualization |
 | 6 — CI/CD | ⏳ Planned | GitHub Actions pipeline, Docker multi-stage builds |
 
 ---
@@ -249,7 +290,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 ```
 com.infratrack/
 ├── domain/
-│   ├── model/             Asset, AssetId, IpAddress, Credentials, enums
+│   ├── model/             Asset, AssetId, IpAddress, Credentials, MetricSnapshot, enums
 │   └── event/             AssetCreatedEvent, AssetStatusChangedEvent, AssetDeletedEvent
 │
 ├── application/
