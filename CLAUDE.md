@@ -84,7 +84,7 @@ Events are plain Java records — no Spring, no JPA. `SpringEventPublisher` impl
 
 ## Testing Strategy
 
-67 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
+81 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
 
 | Layer | Approach | Spring context? |
 |-------|----------|-----------------|
@@ -109,11 +109,11 @@ Events are plain Java records — no Spring, no JPA. `SpringEventPublisher` impl
 | 2 — Asset CRUD | ✅ Done | Full CRUD, AES-256-GCM encryption end-to-end |
 | 3.1 — DTO Layer | ✅ Done | Request/Response DTOs, Bean Validation, security-by-construction |
 | 3.2 — Domain Events | ✅ Done | Event publishing, mock metrics, `DomainEventPublisher` port |
-| 4.1 — Metrics Domain | ✅ Done | MetricSnapshot VO, MonitoringService, JPA layer, mock collector, 67 tests |
-| 4.2 — SSH Real | Planned | SSHJ + Alpine containers |
-| 4.3 — Scheduling + REST | Planned | Virtual Threads, GET /metrics endpoints |
-| 5 — React Dashboard | Planned | Next.js 15 frontend with live metrics |
-| 6 — CI/CD | Planned | GitHub Actions pipeline, final polish |
+| 4.1 — Metrics Domain | ✅ Done | MetricSnapshot VO, MonitoringService, JPA layer, mock collector |
+| 4.2 — SSH Real       | ✅ Done | SshMetricsCollector via SSHJ 0.40, Alpine containers in Docker Compose |
+| 4.3 — Scheduling + REST | ✅ Done | collectAllActive(), Virtual Threads, MetricsScheduler, MetricsRestController, 81 tests |
+| 5 — React Dashboard  | Planned | Next.js 15 frontend with live metrics |
+| 6 — CI/CD            | Planned | GitHub Actions pipeline, final polish |
 
 ---
 
@@ -142,4 +142,11 @@ These do not affect the public documentation above.
 • MonitoringService constructor: (AssetRepository, MetricsCollector, MetricSnapshotRepository).
 • AssetService constructor now takes two params: (AssetRepository, DomainEventPublisher).
   BeanConfiguration wires both. Tests mock both.
+• MetricsScheduler uses @Component (auto-detected). Reads infratrack.monitoring.interval-seconds
+  from application.yml (default 60). Virtual Thread spawning happens in MonitoringService.collectAllActive(),
+  not in the scheduler — scheduler is a thin trigger only.
+• SchedulingConfiguration is a dedicated @Configuration class with @EnableScheduling.
+  @EnableScheduling is NOT in BeanConfiguration.
+• GET /{id}/metrics reuses getHistory(id, 1) — no getLatest() method on the use case (YAGNI).
+• GET /{id}/metrics/history returns 200 + empty list when no data. Never 404.
 -->

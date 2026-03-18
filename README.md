@@ -15,7 +15,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 - **Security by construction** — SSH credentials encrypted with AES-256-GCM at rest. API responses structurally cannot contain passwords (`AssetResponse` has no password field — not hidden, *absent*).
 - **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + simulated data), `prod` (real infrastructure).
 - **Virtual Threads** — Java 21 Virtual Threads enabled for non-blocking I/O across SSH connections and async event processing.
-- **58 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
+- **81 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
 
 ---
 
@@ -122,6 +122,8 @@ The API is available at `http://localhost:8080/api/v1/assets`.
 
 ## API Reference
 
+### Asset endpoints
+
 All endpoints under `/api/v1/assets`:
 
 | Method | Endpoint | Description |
@@ -133,6 +135,13 @@ All endpoints under `/api/v1/assets`:
 | `PUT` | `/{id}/credentials` | Update SSH credentials |
 | `PUT` | `/{id}/ip` | Update IP address |
 | `DELETE` | `/{id}` | Delete asset |
+
+### Metrics endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/{id}/metrics` | Latest snapshot (404 if none) |
+| `GET` | `/{id}/metrics/history` | Last N snapshots (default 20, `?limit=N`) |
 
 ### Example: Create an asset
 
@@ -185,7 +194,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 
 ## Testing
 
-67 tests passing across four layers:
+**81 tests** passing across four layers:
 
 | Layer | Strategy | Spring context |
 |-------|----------|----------------|
@@ -224,13 +233,13 @@ The encryption converter is transparent to the domain — it operates at the JPA
 
 ## Roadmap
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 1 — Scaffolding | ✅ Done | Hexagonal package structure, Docker Compose, profile system |
-| 2 — Asset CRUD + Encryption | ✅ Done | Full CRUD with AES-256-GCM encrypted credentials |
-| 3 — DTO Layer + Domain Events | ✅ Done | Request/Response DTOs, Bean Validation, event bus |
-| 4 — SSH Monitoring | 🔄 In progress | Metrics collection, persistence, SSH connections, REST API |
-| 5 — React Dashboard | ⏳ Planned | Next.js 15 frontend with real-time metrics visualization |
+| Phase | Status    | Description |
+|-------|-----------|-------------|
+| 1 — Scaffolding | ✅ Done    | Hexagonal package structure, Docker Compose, profile system |
+| 2 — Asset CRUD + Encryption | ✅ Done    | Full CRUD with AES-256-GCM encrypted credentials |
+| 3 — DTO Layer + Domain Events | ✅ Done    | Request/Response DTOs, Bean Validation, event bus |
+| 4 — SSH Monitoring | ✅ Done    | Metrics collection, persistence, SSH connections, REST API |
+| 5 — React Dashboard | 🔄 Soon   | Next.js 15 frontend with real-time metrics visualization |
 | 6 — CI/CD | ⏳ Planned | GitHub Actions pipeline, Docker multi-stage builds |
 
 ---
@@ -244,17 +253,21 @@ com.infratrack/
 │   └── event/             AssetCreatedEvent, AssetStatusChangedEvent, AssetDeletedEvent
 │
 ├── application/
-│   ├── port/input/        ManageAssetUseCase
-│   ├── port/output/       AssetRepository, DomainEventPublisher
-│   └── service/           AssetService
+│   ├── port/input/        ManageAssetUseCase, MonitorAssetUseCase
+│   ├── port/output/       AssetRepository, DomainEventPublisher,
+│   │                      MetricsCollector, MetricSnapshotRepository
+│   └── service/           AssetService, MonitoringService
 │
 └── infrastructure/
-    ├── adapter/input/     AssetRestController
-    ├── adapter/input/dto/ CreateAssetRequest, AssetResponse, AssetDtoMapper
+    ├── adapter/input/     AssetRestController, MetricsRestController,
+    │                      MetricsScheduler
+    ├── adapter/input/dto/ CreateAssetRequest, AssetResponse, AssetDtoMapper,
+    │                      MetricSnapshotResponse
     ├── adapter/output/    JpaAssetRepository, InMemoryAssetRepository,
     │                      SpringEventPublisher, MockMetricsCollector,
+    │                      SshMetricsCollector,
     │                      JpaMetricSnapshotRepository, InMemoryMetricSnapshotRepository
-    ├── config/            BeanConfiguration (explicit wiring, no @Service)
+    ├── config/            BeanConfiguration, SchedulingConfiguration
     ├── persistence/       AssetJpaEntity, AssetMapper,
     │                      MetricSnapshotJpaEntity, MetricSnapshotMapper,
     │                      SpringDataMetricSnapshotRepository, schema.sql
