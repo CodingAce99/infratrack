@@ -11,4 +11,6 @@ public interface MonitorAssetUseCase {
     MetricSnapshot collectNow(AssetId assetId);
 
     List<MetricSnapshot> getHistory(AssetId assetId, int limit);
+
+    void collectAllActive();
 }

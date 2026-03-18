@@ -10,9 +10,9 @@ public class MockMetricsCollector implements MetricsCollector {
 
     @Override
     public MetricSnapshot collect(Asset asset) {
-                double cpuUsage = ThreadLocalRandom.current().nextDouble(0.0, 90.0);
-                double memoryUsage = ThreadLocalRandom.current().nextDouble(0.0, 90.0);
-                double diskUsage = ThreadLocalRandom.current().nextDouble(0.0, 90.0);
+        double cpuUsage = ThreadLocalRandom.current().nextDouble(0.0, 90.0);
+        double memoryUsage = ThreadLocalRandom.current().nextDouble(0.0, 90.0);
+        double diskUsage = ThreadLocalRandom.current().nextDouble(0.0, 90.0);
         return MetricSnapshot.of(asset.getId(), cpuUsage, memoryUsage, diskUsage);
     }
 }
