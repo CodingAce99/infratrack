@@ -5,11 +5,15 @@ Project guidance for [Claude Code](https://claude.ai/code) and contributor onboa
 ## Quick Start
 
 ```bash
+# Full demo — PostgreSQL + SSH target + app, all containerized
+export INFRATRACK_ENCRYPTION_KEY=$(openssl rand -base64 32)
+docker-compose up -d
+
 # Dev profile — H2 in-memory, no Docker required
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 
-# Demo profile — PostgreSQL + real SSH to Alpine containers (recruiter-friendly)
-docker-compose up -d
+# Demo on host — app runs locally, Docker for services only
+docker-compose up -d postgres ssh-target-1
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=demo
 
 # Build & test
@@ -87,6 +91,14 @@ Events are plain Java records — no Spring, no JPA. `SpringEventPublisher` impl
 
 `MetricsScheduler` triggers `collectAllActive()` on a configurable interval (default 60s). Each active asset gets its own Virtual Thread for parallel SSH collection. `MetricsRestController` exposes latest snapshot and historical data via REST.
 
+## CI/CD
+
+GitHub Actions workflow (`.github/workflows/ci.yml`) triggers on push and PR to `main`. Runs `./mvnw clean verify -Dspring.profiles.active=dev` — H2 + MockMetricsCollector, zero external services needed. Badge at top of README.
+
+Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 2 runs with JRE Alpine (~200MB final image). Layer caching via separated `pom.xml` copy + `dependency:resolve`.
+
+`docker-compose up -d` starts the full ecosystem: PostgreSQL + SSH target + Infratrack app. The app service overrides datasource URL and SSH port via environment variables for Docker-internal networking.
+
 ## Security
 
 | Layer | Mechanism |
@@ -129,7 +141,7 @@ Events are plain Java records — no Spring, no JPA. `SpringEventPublisher` impl
 | 4.2 — SSH Real | ✅ Done | SshMetricsCollector via SSHJ 0.40.0, Alpine containers in Docker Compose |
 | 4.3 — Scheduling + REST | ✅ Done | collectAllActive(), Virtual Threads, MetricsScheduler, MetricsRestController |
 | 5 — React Dashboard | Planned | Next.js 15 frontend with live metrics |
-| 6 — CI/CD | Planned | GitHub Actions pipeline, final polish |
+| 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build, full ecosystem containerized |
 
 ---
 
@@ -137,18 +149,19 @@ Events are plain Java records — no Spring, no JPA. `SpringEventPublisher` impl
 CLAUDE CODE INTERNAL NOTES — operational details for AI-assisted development.
 These do not affect the public documentation above.
 
-• PostgreSQL is mapped to port 5433 (not 5432) to avoid conflicts with Docker Desktop internals.
-• SSH target container maps port 2222 (host) → 22 (container). App connects to 127.0.0.1:2222
-  when running on host. infratrack.ssh.port=2222 in application-demo.yml, default 22 for prod.
+DATABASE & SCHEMA
+• PostgreSQL is mapped to port 5433 (host) → 5432 (container) to avoid conflicts with Docker Desktop.
 • Encryption key property path: `infratrack.encryption.key` in application.yml.
   Do NOT use `infratrack.security.encryption.key` (legacy path, no longer valid).
 • `defer-datasource-initialization=true` must NOT be used — it inverts SQL init / validate order.
 • `ddl-auto: update` was discarded because Hibernate 6.x silently aborts DDL generation when
   EncryptedStringConverter lacks a no-arg constructor. Manual schema.sql is the solution.
+
+BEAN WIRING
 • JpaAssetRepository has @Repository (so Spring autoconfigures SpringDataAssetRepository)
   but is NOT registered as a @Bean — it's instantiated manually via
   `new JpaAssetRepository(springRepo)` to avoid duplicate bean conflicts.
-• MapStruct adoption is deferred to Phase 5+ — manual mappers are intentional for now.
+• MapStruct adoption is deferred — manual mappers are intentional for now.
 • SpringEventPublisher uses @Component (auto-detected by Spring), not explicit wiring in
   BeanConfiguration. This is intentional — it's a simple infrastructure adapter with no
   profile-specific behavior, unlike repositories.
@@ -163,13 +176,38 @@ These do not affect the public documentation above.
 • MonitoringService constructor: (AssetRepository, MetricsCollector, MetricSnapshotRepository).
 • AssetService constructor: (AssetRepository, DomainEventPublisher).
   BeanConfiguration wires both services. Tests mock all collaborators.
+
+SCHEDULING
 • MetricsScheduler uses @Component (auto-detected). Reads infratrack.monitoring.interval-seconds
   from application.yml (default 60). Virtual Thread spawning happens in MonitoringService.collectAllActive(),
   not in the scheduler — scheduler is a thin trigger only.
 • SchedulingConfiguration is a dedicated @Configuration class with @EnableScheduling.
   @EnableScheduling is NOT in BeanConfiguration.
+
+REST ENDPOINTS
 • GET /{id}/metrics reuses getHistory(id, 1) — no getLatest() method on the use case (YAGNI).
 • GET /{id}/metrics/history returns 200 + empty list when no data. Never 404.
-• Docker Alpine SSH target: user sshuser/sshpass, Alpine 3.19, procps + coreutils installed.
-  Dockerfile at docker/alpine-ssh/Dockerfile.
+
+DOCKER & NETWORKING
+• SSH target container: user sshuser/sshpass, Alpine 3.19, procps + coreutils.
+  Dockerfile at docker/alpine-ssh/Dockerfile. Port 2222 (host) → 22 (container).
+• application-demo.yml SSH port: ${INFRATRACK_SSH_PORT:2222}. Running on host → 2222 (mapped).
+  Running in Docker → 22 (env override from docker-compose).
+• App Dockerfile: multi-stage, eclipse-temurin:21-jdk-alpine (build) → eclipse-temurin:21-jre-alpine (run).
+  Layer caching: pom.xml + dependency:resolve first, then source copy.
+  chmod +x ./mvnw included for Windows Git execute bit stripping.
+• docker-compose app service overrides:
+  - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/infratrack (Docker-internal, not localhost:5433)
+  - INFRATRACK_SSH_PORT=22 (Docker-internal, not 2222)
+  - INFRATRACK_ENCRYPTION_KEY=${INFRATRACK_ENCRYPTION_KEY:-yt1+CDm1+...} (host env var with fallback)
+  - depends_on postgres with service_healthy condition. No depends_on for ssh-target-1.
+• When app runs in Docker, asset IP must be `web-server-01` (Docker hostname), not `127.0.0.1`.
+  When app runs on host, asset IP is `127.0.0.1`.
+
+CI/CD
+• GitHub Actions: .github/workflows/ci.yml. Temurin 21, Maven cache, chmod +x ./mvnw.
+• CI uses dev profile (H2 + mock). No Docker services in CI pipeline.
+• Dummy INFRATRACK_ENCRYPTION_KEY env var set in CI to satisfy Spring placeholder resolution
+  at startup (dev profile doesn't use encryption but base application.yml resolves the variable).
+• Node.js 20 deprecation warning in CI — deadline June 2026. Non-blocking.
 -->

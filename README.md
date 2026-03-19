@@ -16,6 +16,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 - **SSH Monitoring** — Proactive metric collection via SSHJ. A scheduler connects to assets over SSH, extracts CPU/memory/disk metrics, and persists historical data — all parallelized with Virtual Threads.
 - **Domain Events** — Async event bus decouples asset lifecycle from downstream reactions. Events are pure Java records; adding new listeners requires zero changes to existing code.
 - **Security by construction** — SSH credentials encrypted with AES-256-GCM at rest. API responses structurally cannot contain passwords (`AssetResponse` has no password field — not hidden, *absent*).
+- **CI/CD** — GitHub Actions pipeline validates every push. Multi-stage Docker build produces a minimal JRE image. `docker-compose up` starts the entire ecosystem in one command.
 - **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + real SSH to Alpine containers), `prod` (real infrastructure).
 - **Virtual Threads** — Java 21 Virtual Threads for non-blocking parallel SSH collection with per-asset fault isolation.
 - **81 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
@@ -31,8 +32,9 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 | Database | PostgreSQL 17 (Docker) |
 | Encryption | AES-256-GCM via JPA AttributeConverter |
 | SSH | SSHJ 0.40.0 |
+| CI/CD | GitHub Actions |
+| Containerization | Docker, Docker Compose, multi-stage builds |
 | Frontend | React 19 + Next.js 15 *(upcoming)* |
-| Infrastructure | Docker Compose, GitHub Actions |
 | Testing | JUnit 5, Mockito |
 
 ---
@@ -119,17 +121,17 @@ Asset lifecycle changes publish domain events through a port interface (`DomainE
 - **Java 21** — [Eclipse Temurin](https://adoptium.net/)
 - **Docker Desktop** — for PostgreSQL and SSH targets in demo/prod profiles
 
-## Quick Start
+### Option 1: Full demo (recommended for evaluation)
 
-### Option 1: Full demo — recommended for evaluation
 ```bash
 git clone https://github.com/CodingAce99/infratrack.git
 cd infratrack
 
+# Start everything: PostgreSQL + SSH target + Infratrack app
 export INFRATRACK_ENCRYPTION_KEY=$(openssl rand -base64 32)
 docker-compose up -d
 
-# Create a demo asset (note: IP is the Docker hostname, not 127.0.0.1)
+# Create a demo asset (IP is the Docker hostname, not 127.0.0.1)
 curl -X POST http://localhost:8080/api/v1/assets \
   -H "Content-Type: application/json" \
   -d '{"name":"web-server-01","type":"SERVER","ipAddress":"web-server-01","username":"sshuser","password":"sshpass"}'
@@ -138,7 +140,8 @@ curl -X POST http://localhost:8080/api/v1/assets \
 curl http://localhost:8080/api/v1/assets/{id}/metrics/history
 ```
 
-### Option 2: Dev mode — no Docker needed
+### Option 2: Dev mode (no Docker needed)
+
 ```bash
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
@@ -273,38 +276,44 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | 3 — DTO Layer + Domain Events | ✅ Done | Request/Response DTOs, Bean Validation, event bus |
 | 4 — SSH Monitoring | ✅ Done | Metrics collection, persistence, SSH connections, REST API |
 | 5 — React Dashboard | 🔄 Soon | Next.js 15 frontend with real-time metrics visualization |
-| 6 — CI/CD | ⏳ Planned | GitHub Actions pipeline, Docker multi-stage builds |
+| 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build |
 
 ---
 
 ## Project Structure
 
 ```
-com.infratrack/
-├── domain/
-│   ├── model/             Asset, AssetId, IpAddress, Credentials, MetricSnapshot, enums
-│   └── event/             AssetCreatedEvent, AssetStatusChangedEvent, AssetDeletedEvent
+infratrack/
+├── .github/workflows/     CI pipeline (ci.yml)
+├── docker/alpine-ssh/     SSH target Dockerfile
+├── Dockerfile             Multi-stage app build (JDK → JRE)
+├── docker-compose.yml     Full ecosystem: postgres + ssh-target + app
 │
-├── application/
-│   ├── port/input/        ManageAssetUseCase, MonitorAssetUseCase
-│   ├── port/output/       AssetRepository, DomainEventPublisher,
-│   │                      MetricsCollector, MetricSnapshotRepository
-│   └── service/           AssetService, MonitoringService
-│
-└── infrastructure/
-    ├── adapter/input/     AssetRestController, MetricsRestController,
-    │                      MetricsScheduler
-    ├── adapter/input/dto/ CreateAssetRequest, AssetResponse, AssetDtoMapper,
-    │                      MetricSnapshotResponse
-    ├── adapter/output/    JpaAssetRepository, InMemoryAssetRepository,
-    │                      SpringEventPublisher, MockMetricsCollector,
-    │                      SshMetricsCollector,
-    │                      JpaMetricSnapshotRepository, InMemoryMetricSnapshotRepository
-    ├── config/            BeanConfiguration, SchedulingConfiguration
-    ├── persistence/       AssetJpaEntity, AssetMapper,
-    │                      MetricSnapshotJpaEntity, MetricSnapshotMapper,
-    │                      SpringDataMetricSnapshotRepository, schema.sql
-    └── security/          EncryptedStringConverter
+└── src/main/java/com.infratrack/
+    ├── domain/
+    │   ├── model/             Asset, AssetId, IpAddress, Credentials, MetricSnapshot, enums
+    │   └── event/             AssetCreatedEvent, AssetStatusChangedEvent, AssetDeletedEvent
+    │
+    ├── application/
+    │   ├── port/input/        ManageAssetUseCase, MonitorAssetUseCase
+    │   ├── port/output/       AssetRepository, DomainEventPublisher,
+    │   │                      MetricsCollector, MetricSnapshotRepository
+    │   └── service/           AssetService, MonitoringService
+    │
+    └── infrastructure/
+        ├── adapter/input/     AssetRestController, MetricsRestController,
+        │                      MetricsScheduler
+        ├── adapter/input/dto/ CreateAssetRequest, AssetResponse, AssetDtoMapper,
+        │                      MetricSnapshotResponse
+        ├── adapter/output/    JpaAssetRepository, InMemoryAssetRepository,
+        │                      SpringEventPublisher, MockMetricsCollector,
+        │                      SshMetricsCollector,
+        │                      JpaMetricSnapshotRepository, InMemoryMetricSnapshotRepository
+        ├── config/            BeanConfiguration, SchedulingConfiguration
+        ├── persistence/       AssetJpaEntity, AssetMapper,
+        │                      MetricSnapshotJpaEntity, MetricSnapshotMapper,
+        │                      SpringDataMetricSnapshotRepository, schema.sql
+        └── security/          EncryptedStringConverter
 ```
 
 ---
