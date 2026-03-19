@@ -1,3 +1,5 @@
+[![CI](https://github.com/CodingAce99/infratrack/actions/workflows/ci.yml/badge.svg)](https://github.com/CodingAce99/infratrack/actions/workflows/ci.yml)
+
 # Infratrack
 
 **IT infrastructure inventory and monitoring system** built with Java 21, Spring Boot 3.5, and PostgreSQL 17.
@@ -117,36 +119,26 @@ Asset lifecycle changes publish domain events through a port interface (`DomainE
 - **Java 21** — [Eclipse Temurin](https://adoptium.net/)
 - **Docker Desktop** — for PostgreSQL and SSH targets in demo/prod profiles
 
-### Option 1: Demo mode (recommended for evaluation)
+## Quick Start
 
+### Option 1: Full demo — recommended for evaluation
 ```bash
 git clone https://github.com/CodingAce99/infratrack.git
 cd infratrack
 
-# Generate an encryption key
 export INFRATRACK_ENCRYPTION_KEY=$(openssl rand -base64 32)
-
-# Start PostgreSQL and SSH target, then run the application
 docker-compose up -d
-./mvnw spring-boot:run -Dspring-boot.run.profiles=demo
-```
 
-Create a demo asset pointing to the SSH target:
-
-```bash
+# Create a demo asset (note: IP is the Docker hostname, not 127.0.0.1)
 curl -X POST http://localhost:8080/api/v1/assets \
   -H "Content-Type: application/json" \
-  -d '{"name":"web-server-01","type":"SERVER","ipAddress":"127.0.0.1","username":"sshuser","password":"sshpass"}'
-```
+  -d '{"name":"web-server-01","type":"SERVER","ipAddress":"web-server-01","username":"sshuser","password":"sshpass"}'
 
-Wait 60 seconds for the scheduler to collect metrics, then query:
-
-```bash
+# Wait 60 seconds for the scheduler, then query metrics
 curl http://localhost:8080/api/v1/assets/{id}/metrics/history
 ```
 
-### Option 2: Dev mode (no Docker needed)
-
+### Option 2: Dev mode — no Docker needed
 ```bash
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
