@@ -1,0 +1,11 @@
+target/
+.idea/
+*.iml
+.git/
+.github/
+docker-data/
+postgres-data/
+node_modules/
+*.log
+*.md
+!README.md

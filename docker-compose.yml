@@ -1,7 +1,5 @@
-version: '3.9'
-
 services:
-  
+
   # PostgreSQL database
   postgres:
     image: postgres:17-alpine
@@ -22,12 +20,34 @@ services:
     networks:
       - infratrack-network
 
+  # SSH monitoring target
   ssh-target-1:
     build: ./docker/alpine-ssh
     container_name: infratrack-ssh-target-1
     hostname: web-server-01
     ports:
       - "2222:22"
+    networks:
+      - infratrack-network
+
+  # Infratrack application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: infratrack-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: demo
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/infratrack
+      SPRING_DATASOURCE_USERNAME: infratrack_user
+      SPRING_DATASOURCE_PASSWORD: infratrack_pass
+      INFRATRACK_ENCRYPTION_KEY: ${INFRATRACK_ENCRYPTION_KEY:-yt1+CDm1+7KdsybbxWrFcunLl8hnMTROPrEdi2daEuc=}
+      INFRATRACK_SSH_PORT: 22
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - infratrack-network
 
