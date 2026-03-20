@@ -66,6 +66,10 @@ public class AssetService implements ManageAssetUseCase {
     @Override
     public Asset updateAssetIpAddress(AssetId id, IpAddress newIpAddress) {
         Asset asset = findAsset(id);
+        if (!asset.getIpAddress().equals(newIpAddress)
+            && assetRepository.existsByIpAddress(newIpAddress)) {
+            throw new DuplicateIpAddressException(newIpAddress);
+        }
         asset.updateIpAddress(newIpAddress);
         assetRepository.save(asset);
         return asset;

@@ -268,11 +268,40 @@ class AssetServiceTest {
             assertEquals(newIp, result.getIpAddress());
             verify(assetRepository, times(1)).save(asset);
         }
+
+        @Test
+        @DisplayName("should throw DuplicateIpAddressException when duplicate IpAddres exists")
+        void updateAssetIpAddress_shouldThrowDuplicateIpAddressException_whenDuplicateIp() {
+            Asset asset = sampleAsset();
+            IpAddress newIp = IpAddress.of("10.20.30.40");
+
+            when(assetRepository.findById(asset.getId())).thenReturn(Optional.of(asset));
+            when(assetRepository.existsByIpAddress(newIp)).thenReturn(true);
+
+            assertThrows(DuplicateIpAddressException.class,
+                    () -> assetService.updateAssetIpAddress(asset.getId(), newIp));
+
+            verify(assetRepository, never()).save(asset);
+        }
+
+        @Test
+        @DisplayName("should update IpAddress and save asset when newIp equals actual IpAddress")
+        void updateAssetIpAddress_shouldUpdateIpAddressAndSave_whenNewIpEqualsIp() {
+            Asset asset = sampleAsset();
+            IpAddress newIp = asset.getIpAddress();
+
+            when(assetRepository.findById(asset.getId())).thenReturn(Optional.of(asset));
+            Asset result = assetService.updateAssetIpAddress(asset.getId(), newIp);
+
+            assertEquals(newIp, result.getIpAddress());
+            verify(assetRepository, times(1)).save(asset);
+        }
     }
 
-    // -------------------------------------------------------------------------
-    // deleteAsset()
-    // -------------------------------------------------------------------------
+
+// -------------------------------------------------------------------------
+// deleteAsset()
+// -------------------------------------------------------------------------
 
     @Nested
     @DisplayName("deleteAsset()")
