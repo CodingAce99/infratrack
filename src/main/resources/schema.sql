@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS assets (
     ip_address  VARCHAR(45)  NOT NULL,
     status      VARCHAR(50)  NOT NULL,
     username    VARCHAR(255) NOT NULL,
-    password    VARCHAR(500) NOT NULL  -- Encrypted with AES-256-GCM (IV + ciphertext in Base64)
+    password    VARCHAR(500) NOT NULL,  -- Encrypted with AES-256-GCM (IV + ciphertext in Base64)
     CONSTRAINT uk_assets_ip_address UNIQUE (ip_address)
 );
 

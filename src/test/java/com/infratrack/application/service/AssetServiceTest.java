@@ -141,13 +141,13 @@ class AssetServiceTest {
         }
 
         @Test
-        @DisplayName("debe lanzar IllegalArgumentException cuando el asset no existe")
-        void findAsset_shouldThrowIllegalArgumentException_whenAssetDoesNotExist() {
+        @DisplayName("debe lanzar AssetNotFoundException cuando el asset no existe")
+        void findAsset_shouldThrowAssetNotFoundException_whenAssetDoesNotExist() {
             AssetId unknownId = AssetId.generate();
             when(assetRepository.findById(unknownId)).thenReturn(Optional.empty());
 
-            IllegalArgumentException ex = assertThrows(
-                    IllegalArgumentException.class,
+            AssetNotFoundException ex = assertThrows(
+                    AssetNotFoundException.class,
                     () -> assetService.findAsset(unknownId)
             );
 
@@ -290,13 +290,13 @@ class AssetServiceTest {
         }
 
         @Test
-        @DisplayName("debe lanzar IllegalArgumentException cuando el asset no existe")
-        void deleteAsset_shouldThrowIllegalArgumentException_whenAssetDoesNotExist() {
+        @DisplayName("debe lanzar AssetNotFoundException cuando el asset no existe")
+        void deleteAsset_shouldThrowAssetNotFoundException_whenAssetDoesNotExist() {
             AssetId unknownId = AssetId.generate();
             when(assetRepository.findById(unknownId)).thenReturn(Optional.empty());
 
             assertThrows(
-                    IllegalArgumentException.class,
+                    AssetNotFoundException.class,
                     () -> assetService.deleteAsset(unknownId)
             );
 

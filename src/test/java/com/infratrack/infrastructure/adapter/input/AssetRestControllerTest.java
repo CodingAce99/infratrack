@@ -68,6 +68,17 @@ public class AssetRestControllerTest {
                     .andExpect(jsonPath("$.name").value("Test Asset"))
                     .andExpect(jsonPath("$.password").doesNotExist());
         }
+
+        @Test
+        @DisplayName("returns 404 when asset is not found")
+        void findAsset_returns404_whenAssetIsNotFound() throws Exception {
+            when(useCase.findAsset(any()))
+                    .thenThrow(new AssetNotFoundException(AssetId.of("00000000-0000-0000-0000-000000000000")));
+
+            mockMvc.perform(get("/api/v1/assets/{id}", "00000000-0000-0000-0000-000000000000"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error").exists());
+        }
     }
 
     @Nested
@@ -93,5 +104,22 @@ public class AssetRestControllerTest {
                     .andExpect(jsonPath("$.name").value("Test Asset"))
                     .andExpect(jsonPath("$.password").doesNotExist());
         }
+
+        @Test
+        @DisplayName("returns 409 when IP address already exists")
+        void createAsset_returns409_whenIpIsDuplicate() throws Exception {
+            when(useCase.createAsset(any()))
+                    .thenThrow(new DuplicateIpAddressException(IpAddress.of("web-server-01")));
+
+            mockMvc.perform(post("/api/v1/assets")
+                            .contentType("application/json")
+                            .content("""
+                                    {"name":"web-server-01","type":"SERVER","ipAddress":"web-server-01",
+                                      "username":"sshuser","password":"sshpass"}
+                                    """))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.error").exists());
+        }
     }
 }
+

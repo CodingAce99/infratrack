@@ -34,8 +34,7 @@ public class AssetService implements ManageAssetUseCase {
     @Override
     public Asset findAsset(AssetId id) {
         return assetRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Asset not found with id: " + id));
+                .orElseThrow(() -> new AssetNotFoundException(id));
     }
 
     @Override
