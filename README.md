@@ -19,7 +19,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 - **CI/CD** — GitHub Actions pipeline validates every push. Multi-stage Docker build produces a minimal JRE image. `docker-compose up` starts the entire ecosystem in one command.
 - **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + real SSH to Alpine containers), `prod` (real infrastructure).
 - **Virtual Threads** — Java 21 Virtual Threads for non-blocking parallel SSH collection with per-asset fault isolation.
-- **81 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
+- **85 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
 
 ---
 
@@ -230,7 +230,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 
 ## Testing
 
-**81 tests** passing across four layers:
+**85 tests** passing across four layers:
 
 | Layer | Strategy | Spring context |
 |-------|----------|----------------|

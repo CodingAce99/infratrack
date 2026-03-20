@@ -32,27 +32,34 @@ public class SshMetricsCollector implements MetricsCollector {
                     asset.getCredentials().getUsername(),
                     asset.getCredentials().getPassword()
             );
+
+            String cpuOutput;
             try (Session session = ssh.startSession()) {
-
-                Session.Command cpuCmd = session.exec("top -bn1 | grep '%Cpu'");
-                String cpuOutput = new String(cpuCmd.getInputStream().readAllBytes());
-                cpuCmd.join(5, TimeUnit.SECONDS); // wait for remote process to finish
-
-                Session.Command memCmd = session.exec("free -m | awk 'NR==2 {printf \"%d %d\", $3, $2}'");
-                String memOutput = new String(memCmd.getInputStream().readAllBytes());
-                memCmd.join(5, TimeUnit.SECONDS);
-
-                Session.Command diskCmd = session.exec("df / | awk 'NR==2 {print $5}'");
-                String diskOutput = new String(diskCmd.getInputStream().readAllBytes());
-                diskCmd.join(5, TimeUnit.SECONDS);
-
-                return MetricSnapshot.of(
-                        asset.getId(),
-                        parseCpuUsage(cpuOutput),
-                        parseMemoryUsage(memOutput),
-                        parseDiskUsage(diskOutput)
-                );
+                Session.Command cmd = session.exec("top -bn1 | grep '%Cpu'");
+                cpuOutput = new String(cmd.getInputStream().readAllBytes());
+                cmd.join(5, TimeUnit.SECONDS); // wait for remote process to finish
             }
+
+            String memOutput;
+            try (Session session = ssh.startSession()) {
+                Session.Command cmd = session.exec("free -m | awk 'NR==2 {printf \"%d %d\", $3, $2}'");
+                memOutput = new String(cmd.getInputStream().readAllBytes());
+                cmd.join(5, TimeUnit.SECONDS);
+            }
+
+            String diskOutput;
+            try (Session session = ssh.startSession()) {
+                Session.Command cmd = session.exec("df / | awk 'NR==2 {print $5}'");
+                diskOutput = new String(cmd.getInputStream().readAllBytes());
+                cmd.join(5, TimeUnit.SECONDS);
+            }
+
+            return MetricSnapshot.of(
+                    asset.getId(),
+                    parseCpuUsage(cpuOutput),
+                    parseMemoryUsage(memOutput),
+                    parseDiskUsage(diskOutput)
+            );
         } catch (IOException e) {
             throw new RuntimeException(
                     "SSH collection failed for asset " + asset.getId().getValue(), e);
@@ -60,7 +67,7 @@ public class SshMetricsCollector implements MetricsCollector {
             try {
                 ssh.disconnect();
             } catch (IOException e) {
-                // ignored - already in cleanup
+                // /* ignored */
             }
 
         }

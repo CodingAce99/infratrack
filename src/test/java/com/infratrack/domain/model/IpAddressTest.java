@@ -30,15 +30,38 @@ class IpAddressTest {
     @Test
     void shouldRejectInvalidIpAddress() {
         assertThrows(IllegalArgumentException.class, () -> {
-            IpAddress.of("999.999.999.999");
+            IpAddress.of("256.256.256.256!");
         });
     }
 
     @Test
-    void shouldRejectNonNumericIpAddress() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            IpAddress.of("not.an.ip.address");
-        });
+    void shouldAcceptIpv4BoundaryValues() {
+        assertDoesNotThrow(() -> IpAddress.of("0.0.0.0"));
+        assertDoesNotThrow(() -> IpAddress.of("255.255.255.255"));
+    }
+
+    @Test
+    void shouldRejectHostnameStartingWithHyphen() {
+        assertThrows(IllegalArgumentException.class, () ->
+                IpAddress.of("-invalid-start"));
+    }
+
+    @Test
+    void shouldRejectHostnameEndingWithHyphen() {
+        assertThrows(IllegalArgumentException.class, () ->
+                IpAddress.of("server-01-"));
+    }
+
+    @Test
+    void shouldAcceptDockerHostname() {
+        IpAddress ip = IpAddress.of("web-server-01");
+        assertEquals("web-server-01", ip.getValue());
+    }
+
+    @Test
+    void shouldAcceptSingleLabelHostname() {
+        IpAddress ip = IpAddress.of("localhost");
+        assertEquals("localhost", ip.getValue());
     }
 
     @Test

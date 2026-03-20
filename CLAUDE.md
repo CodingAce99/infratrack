@@ -111,7 +111,7 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 
 ## Testing Strategy
 
-81 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
+85 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
 
 | Layer | Approach | Spring context? |
 |-------|----------|-----------------|
@@ -171,11 +171,18 @@ BEAN WIRING
   @Profile({"demo", "prod"}) and @Value("${infratrack.ssh.port:22}").
 • SshMetricsCollector parsing: done in Java with regex, not shell. Pattern: ([\d.]+)\s*id for CPU.
   Static parse methods are independently testable without SSH connections.
+• - SshMetricsCollector session handling: one Session per command — SSHJ channels are
+  single-use. Reusing the same Session for multiple exec() calls throws
+  "This session channel is all used up". The SSHClient connection is reused; only Sessions are not.
 • InMemoryMetricsSnapshotRepository (note: class name has plural 'Metrics') registered as
   MetricSnapshotRepository bean for dev profile in BeanConfiguration.
 • MonitoringService constructor: (AssetRepository, MetricsCollector, MetricSnapshotRepository).
 • AssetService constructor: (AssetRepository, DomainEventPublisher).
   BeanConfiguration wires both services. Tests mock all collaborators.
+• IpAddress accepts IPv4 (e.g. 192.168.1.1) and RFC 1123 hostnames (e.g. web-server-01).
+  Both CreateAssetRequest and UpdateIpAddressRequest @Pattern updated to match.
+  When app runs in Docker, asset IP must be the Docker hostname (web-server-01), not 127.0.0.1.
+
 
 SCHEDULING
 • MetricsScheduler uses @Component (auto-detected). Reads infratrack.monitoring.interval-seconds

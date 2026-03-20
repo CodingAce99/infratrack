@@ -5,15 +5,17 @@ import java.util.regex.Pattern;
 
 /**
  * Value Object representing an IP address (IPv4 or IPv6).
- *
+ * <p>
  * Immutable: Once created, cannot be changed.
  * Self-validating: Constructor validates the format.
  */
 public final class IpAddress {
 
-    // Regex for IPv4 validation (simple version)
-    private static final Pattern IPV4_PATTERN = Pattern.compile(
-            "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$"
+    // Accepts IPv4 addresses and valid hostnames (RFC 1123)
+    private static final Pattern VALID_HOST_PATTERN = Pattern.compile(
+            "^(((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.){3}(25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)" +
+                    "|([a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?" +
+                    "(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?)*))$"
     );
 
     private final String value;
@@ -25,7 +27,7 @@ public final class IpAddress {
             throw new IllegalArgumentException("IP address cannot be empty");
         }
 
-        if (!isValidIpv4(value)) {
+        if (!isValidHostAddress(value)) {
             throw new IllegalArgumentException(
                     "Invalid IP address format: " + value
             );
@@ -42,8 +44,8 @@ public final class IpAddress {
         return value;
     }
 
-    private static boolean isValidIpv4(String ip) {
-        return IPV4_PATTERN.matcher(ip).matches();
+    private static boolean isValidHostAddress(String Value) {
+        return VALID_HOST_PATTERN.matcher(Value).matches();
     }
 
     @Override
