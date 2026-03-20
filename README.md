@@ -19,7 +19,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 - **CI/CD** — GitHub Actions pipeline validates every push. Multi-stage Docker build produces a minimal JRE image. `docker-compose up` starts the entire ecosystem in one command.
 - **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + real SSH to Alpine containers), `prod` (real infrastructure).
 - **Virtual Threads** — Java 21 Virtual Threads for non-blocking parallel SSH collection with per-asset fault isolation.
-- **85 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
+- **91 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
 
 ---
 
@@ -187,7 +187,7 @@ curl -X POST http://localhost:8080/api/v1/assets \
   -d '{
     "name": "web-server-01",
     "type": "SERVER",
-    "ipAddress": "192.168.1.10",
+    "ipAddress": "web-server-01",
     "username": "admin",
     "password": "s3cr3t"
   }'
@@ -200,11 +200,14 @@ Response — note that `password` is never returned:
   "id": "123e4567-e89b-12d3-a456-426614174000",
   "name": "web-server-01",
   "type": "SERVER",
-  "ipAddress": "192.168.1.10",
+  "ipAddress": "web-server-01",
   "status": "ACTIVE",
   "username": "admin"
 }
 ```
+
+> **Note:** When running in Full Docker mode, use the Docker hostname (`web-server-01`).
+> When running the app on the host with `./mvnw spring-boot:run`, use `127.0.0.1`.
 
 ### Asset types and statuses
 
@@ -230,7 +233,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 
 ## Testing
 
-**85 tests** passing across four layers:
+**91 tests** passing across four layers:
 
 | Layer | Strategy | Spring context |
 |-------|----------|----------------|

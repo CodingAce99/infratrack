@@ -111,7 +111,7 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 
 ## Testing Strategy
 
-85 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
+91 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
 
 | Layer | Approach | Spring context? |
 |-------|----------|-----------------|
