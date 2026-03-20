@@ -2,6 +2,7 @@ package com.infratrack.application.port.output;
 
 import com.infratrack.domain.model.Asset;
 import com.infratrack.domain.model.AssetId;
+import com.infratrack.domain.model.IpAddress;
 
 import java.util.List;
 import java.util.Optional;
@@ -15,5 +16,7 @@ public interface AssetRepository {
     void save(Asset asset);
 
     void delete(AssetId id);
+
+    boolean existsByIpAddress(IpAddress ipAddress);
 }
 

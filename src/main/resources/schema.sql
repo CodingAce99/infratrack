@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS assets (
     status      VARCHAR(50)  NOT NULL,
     username    VARCHAR(255) NOT NULL,
     password    VARCHAR(500) NOT NULL  -- Encrypted with AES-256-GCM (IV + ciphertext in Base64)
+    CONSTRAINT uk_assets_ip_address UNIQUE (ip_address)
 );
 
 CREATE TABLE IF NOT EXISTS metrics (
@@ -21,4 +22,4 @@ CREATE TABLE IF NOT EXISTS metrics (
     CONSTRAINT fk_metrics_asset FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_metrics_asset_time ON metrics(asset_id, collected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_metrics_asset_time ON metrics(asset_id, collected_at DESC);

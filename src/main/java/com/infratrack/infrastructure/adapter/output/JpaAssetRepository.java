@@ -3,6 +3,7 @@ package com.infratrack.infrastructure.adapter.output;
 import com.infratrack.application.port.output.AssetRepository;
 import com.infratrack.domain.model.Asset;
 import com.infratrack.domain.model.AssetId;
+import com.infratrack.domain.model.IpAddress;
 import com.infratrack.infrastructure.persistence.AssetMapper;
 import com.infratrack.infrastructure.persistence.SpringDataAssetRepository;
 import org.springframework.context.annotation.Profile;
@@ -40,6 +41,11 @@ public class JpaAssetRepository implements AssetRepository {
     @Override
     public void delete(AssetId id) {
         springRepo.deleteById(id.toString());
+    }
+
+    @Override
+    public boolean existsByIpAddress(IpAddress ipAddress) {
+        return springRepo.existsByIpAddress(ipAddress.getValue());
     }
 }
 

@@ -6,11 +6,7 @@ import com.infratrack.application.port.output.DomainEventPublisher;
 import com.infratrack.domain.event.AssetCreatedEvent;
 import com.infratrack.domain.event.AssetDeletedEvent;
 import com.infratrack.domain.event.AssetStatusChangedEvent;
-import com.infratrack.domain.model.Asset;
-import com.infratrack.domain.model.AssetId;
-import com.infratrack.domain.model.AssetStatus;
-import com.infratrack.domain.model.Credentials;
-import com.infratrack.domain.model.IpAddress;
+import com.infratrack.domain.model.*;
 
 import java.util.List;
 import java.util.Objects;
@@ -27,6 +23,9 @@ public class AssetService implements ManageAssetUseCase {
 
     @Override
     public Asset createAsset(Asset asset) {
+        if (assetRepository.existsByIpAddress(asset.getIpAddress())) {
+            throw new DuplicateIpAddressException(asset.getIpAddress());
+        }
         assetRepository.save(asset);
         publisher.publish(AssetCreatedEvent.of(asset.getId(), asset.getType()));
         return asset;

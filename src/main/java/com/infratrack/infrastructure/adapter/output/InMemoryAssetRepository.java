@@ -3,6 +3,7 @@ package com.infratrack.infrastructure.adapter.output;
 import com.infratrack.application.port.output.AssetRepository;
 import com.infratrack.domain.model.Asset;
 import com.infratrack.domain.model.AssetId;
+import com.infratrack.domain.model.IpAddress;
 
 import java.util.HashMap;
 import java.util.List;
@@ -32,6 +33,11 @@ public class InMemoryAssetRepository implements AssetRepository {
     @Override
     public void delete(AssetId id) {
         store.remove(id.toString());
+    }
+
+    @Override
+    public boolean existsByIpAddress(IpAddress ipAddress) {
+        return store.values().stream().anyMatch(asset -> asset.getIpAddress().equals(ipAddress));
     }
 }
 

@@ -3,12 +3,7 @@ package com.infratrack.application.service;
 import com.infratrack.application.port.output.AssetRepository;
 import com.infratrack.application.port.output.DomainEventPublisher;
 import com.infratrack.domain.event.AssetCreatedEvent;
-import com.infratrack.domain.model.Asset;
-import com.infratrack.domain.model.AssetId;
-import com.infratrack.domain.model.AssetStatus;
-import com.infratrack.domain.model.AssetType;
-import com.infratrack.domain.model.Credentials;
-import com.infratrack.domain.model.IpAddress;
+import com.infratrack.domain.model.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -87,6 +82,7 @@ class AssetServiceTest {
         @DisplayName("debe crear el asset, llamar a save() una vez y devolverlo")
         void createAsset_shouldSaveAndReturnNewAsset() {
             Asset asset = sampleAsset();
+            when(assetRepository.existsByIpAddress(asset.getIpAddress())).thenReturn(false);
 
             Asset result = assetService.createAsset(asset);
 
@@ -96,6 +92,31 @@ class AssetServiceTest {
             verify(assetRepository, times(1)).save(result);
             verify(publisher, times(1)).publish(any(AssetCreatedEvent.class));
 
+        }
+
+        @Test
+        @DisplayName("debe lanzar DuplicateIpAddressException si ya existe un asset con esa IP")
+        void createAsset_shouldThrowDuplicateIpAddressException_whenIpAddressAlreadyExists() {
+            Asset asset = sampleAsset();
+            when(assetRepository.existsByIpAddress(asset.getIpAddress())).thenReturn(true);
+
+            assertThrows(DuplicateIpAddressException.class,
+                    () -> assetService.createAsset(asset));
+
+            verify(assetRepository, never()).save(any());
+            verify(publisher, never()).publish(any(AssetCreatedEvent.class));
+        }
+
+        @Test
+        @DisplayName("debe guardar y publicar evento cuando la IP no existe")
+        void createAsset_shouldSaveAndPublishEvent_whenIpAddressDontExists() {
+            Asset asset = sampleAsset();
+            when(assetRepository.existsByIpAddress(asset.getIpAddress())).thenReturn(false);
+
+            assetService.createAsset(asset);
+
+            verify(assetRepository, times(1)).save(asset);
+            verify(publisher, times(1)).publish(any(AssetCreatedEvent.class));
         }
     }
 
