@@ -84,10 +84,4 @@ public class AssetRestController {
         useCase.deleteAsset(assetId);
         return ResponseEntity.noContent().build();
     }
-
-    // @ExceptionHandler para manejar errores
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<String> handleIllegalArgument(IllegalArgumentException e) {
-        return ResponseEntity.badRequest().body(e.getMessage());
-    }
 }
