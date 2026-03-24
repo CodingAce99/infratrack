@@ -3,13 +3,20 @@
 import { Asset, MetricSnapshot } from "@/lib/types";
 import MetricGauge from "./MetricGauge";
 import StatusBadge from "./StatusBadge";
+import useSWR from "swr";
+import { fetcher } from "@/lib/api";
 
 interface AssetCardProps {
   asset: Asset;
-  metrics: MetricSnapshot[];
 }
 
-export default function AssetCard({ asset, metrics }: AssetCardProps) {
+export default function AssetCard({ asset }: AssetCardProps) {
+  const { data: metrics = [] } = useSWR<MetricSnapshot[]>(
+    `/api/v1/assets/${asset.id}/metrics/history?limit=20`,
+    fetcher,
+    { refreshInterval: 60000 },
+  );
+
   const latest = metrics[0] ?? null;
 
   const borderColor = {
