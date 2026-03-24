@@ -51,6 +51,18 @@ services:
     networks:
       - infratrack-network
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: infratrack-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - app
+    networks:
+      - infratrack-network
+
 networks:
   infratrack-network:
     driver: bridge
