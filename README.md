@@ -14,6 +14,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 
 - **Hexagonal Architecture** — Domain layer with zero framework dependencies. Swappable adapters for REST, JPA, SSH, and in-memory storage.
 - **SSH Monitoring** — Proactive metric collection via SSHJ. A scheduler connects to assets over SSH, extracts CPU/memory/disk metrics, and persists historical data — all parallelized with Virtual Threads.
+- **React Dashboard** — Real-time monitoring UI built with Next.js 15 and TypeScript. Auto-refreshing metrics with SWR polling, sparkline charts via Recharts, and a dark ops-themed interface. Served as a static export through nginx with reverse proxy to the backend — zero CORS configuration needed.
 - **Domain Events** — Async event bus decouples asset lifecycle from downstream reactions. Events are pure Java records; adding new listeners requires zero changes to existing code.
 - **Security by construction** — SSH credentials encrypted with AES-256-GCM at rest. API responses structurally cannot contain passwords (`AssetResponse` has no password field — not hidden, *absent*).
 - **CI/CD** — GitHub Actions pipeline validates every push. Multi-stage Docker build produces a minimal JRE image. `docker-compose up` starts the entire ecosystem in one command.
@@ -32,9 +33,9 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 | Database | PostgreSQL 17 (Docker) |
 | Encryption | AES-256-GCM via JPA AttributeConverter |
 | SSH | SSHJ 0.40.0 |
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS v4, Recharts, SWR |
 | CI/CD | GitHub Actions |
 | Containerization | Docker, Docker Compose, multi-stage builds |
-| Frontend | React 19 + Next.js 15 *(upcoming)* |
 | Testing | JUnit 5, Mockito |
 
 ---
@@ -43,58 +44,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 
 Infratrack follows **Hexagonal Architecture** (Ports & Adapters) with two distinct data flows: asset management (HTTP-driven) and monitoring (time-driven).
 
-**Asset Management Flow**
-
-```
-HTTP ──▶ AssetRestController ──▶ AssetDtoMapper
-                                        │
-                ┌───────────────────────────────────────┐
-                │            APPLICATION                │
-                │                                       │
-                │   ManageAssetUseCase ──▶ AssetService  │
-                │         │                    │        │
-                │         │           AssetRepository   │
-                │         │           (output port)     │
-                │         │                    │        │
-                │         ▼                    │        │
-                │   DomainEventPublisher       │        │
-                │    (output port)             │        │
-                └──────────┼───────────────────┼────────┘
-                           │                   │
-                ┌──────────▼───────────────────▼────────┐
-                │         SpringEventPublisher          │
-                │         JpaAssetRepository            │
-                │              INFRASTRUCTURE           │
-                └───────────────────────────────────────┘
-```
-
-**Monitoring Flow**
-
-```
-@Scheduled ──▶ MetricsScheduler
-                       │
-                ┌──────▼────────────────────────────────┐
-                │            APPLICATION                │
-                │                                       │
-                │  MonitorAssetUseCase ──▶ MonitoringService
-                │        │                 │           │
-                │        │        MetricsCollector      │
-                │        │         (output port)        │
-                │        │                 │            │
-                │        │     MetricSnapshotRepository │
-                │        │         (output port)        │
-                └────────┼─────────────────┼────────────┘
-                         │                 │
-                ┌────────▼─────────────────▼────────────┐
-                │  SshMetricsCollector ──▶ Alpine (SSH)  │
-                │  JpaMetricSnapshotRepository ──▶ PG    │
-                │              INFRASTRUCTURE           │
-                └───────────────────────────────────────┘
-
-   HTTP ──▶ MetricsRestController ──▶ MonitorAssetUseCase.getHistory()
-```
-
-The **Dependency Rule** is strictly enforced: all dependencies point inward. The domain knows nothing about Spring, JPA, or HTTP. Value objects (`IpAddress`, `Credentials`, `AssetId`) are self-validating and immutable. Domain entities use factory methods (`Asset.create()`, `Asset.reconstitute()`) instead of public constructors.
+The domain knows nothing about Spring, JPA, or HTTP. Value objects (`IpAddress`, `Credentials`, `AssetId`) are self-validating and immutable. Domain entities use factory methods (`Asset.create()`, `Asset.reconstitute()`) instead of public constructors.
 
 Two dedicated mapper layers keep concerns separated: `AssetDtoMapper` translates between HTTP and the domain, while `AssetMapper` translates between the domain and JPA entities.
 
@@ -112,6 +62,10 @@ Asset lifecycle changes publish domain events through a port interface (`DomainE
 | `AssetStatusChangedEvent` | Status updated | AssetId, new AssetStatus, timestamp |
 | `AssetDeletedEvent` | Asset removed | AssetId, timestamp |
 
+### Frontend
+
+The React dashboard (`frontend/`) is a Next.js 15 static export served by nginx. It connects to the backend API through nginx reverse proxy — both frontend and API are same-origin from the browser's perspective, eliminating CORS entirely. SWR handles data fetching with automatic 60-second polling. Each `AssetCard` component owns its own metrics SWR call, following the single-responsibility principle.
+
 ---
 
 ## Quick Start
@@ -127,7 +81,7 @@ Asset lifecycle changes publish domain events through a port interface (`DomainE
 git clone https://github.com/CodingAce99/infratrack.git
 cd infratrack
 
-# Start everything: PostgreSQL + SSH target + Infratrack app
+# Start everything: PostgreSQL + SSH target + API + Dashboard
 export INFRATRACK_ENCRYPTION_KEY=$(openssl rand -base64 32)
 docker-compose up -d
 
@@ -136,7 +90,10 @@ curl -X POST http://localhost:8080/api/v1/assets \
   -H "Content-Type: application/json" \
   -d '{"name":"web-server-01","type":"SERVER","ipAddress":"web-server-01","username":"sshuser","password":"sshpass"}'
 
-# Wait 60 seconds for the scheduler, then query metrics
+# Open the dashboard
+# http://localhost:3000
+
+# Or query the API directly — wait 60s for the scheduler, then:
 curl http://localhost:8080/api/v1/assets/{id}/metrics/history
 ```
 
@@ -152,7 +109,12 @@ curl http://localhost:8080/api/v1/assets/{id}/metrics/history
 ./mvnw test
 ```
 
-The API is available at `http://localhost:8080/api/v1/assets`.
+### Access
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Dashboard | http://localhost:3000 | Real-time monitoring UI |
+| REST API | http://localhost:8080/api/v1/assets | Backend API |
 
 ---
 
@@ -278,7 +240,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | 2 — Asset CRUD + Encryption | ✅ Done | Full CRUD with AES-256-GCM encrypted credentials |
 | 3 — DTO Layer + Domain Events | ✅ Done | Request/Response DTOs, Bean Validation, event bus |
 | 4 — SSH Monitoring | ✅ Done | Metrics collection, persistence, SSH connections, REST API |
-| 5 — React Dashboard | 🔄 Soon | Next.js 15 frontend with real-time metrics visualization |
+| 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with SWR polling and Recharts sparklines |
 | 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build |
 
 ---
@@ -290,37 +252,31 @@ infratrack/
 ├── .github/workflows/     CI pipeline (ci.yml)
 ├── docker/alpine-ssh/     SSH target Dockerfile
 ├── Dockerfile             Multi-stage app build (JDK → JRE)
-├── docker-compose.yml     Full ecosystem: postgres + ssh-target + app
+├── docker-compose.yml     Full ecosystem: postgres + ssh-target + app + frontend
 │
-└── src/main/java/com.infratrack/
-    ├── domain/
-    │   ├── model/             Asset, AssetId, IpAddress, Credentials, MetricSnapshot, enums
-    │   └── event/             AssetCreatedEvent, AssetStatusChangedEvent, AssetDeletedEvent
-    │
-    ├── application/
-    │   ├── port/input/        ManageAssetUseCase, MonitorAssetUseCase
-    │   ├── port/output/       AssetRepository, DomainEventPublisher,
-    │   │                      MetricsCollector, MetricSnapshotRepository
-    │   └── service/           AssetService, MonitoringService
-    │
-    └── infrastructure/
-        ├── adapter/input/     AssetRestController, MetricsRestController,
-        │                      MetricsScheduler
-        ├── adapter/input/dto/ CreateAssetRequest, AssetResponse, AssetDtoMapper,
-        │                      MetricSnapshotResponse
-        ├── adapter/output/    JpaAssetRepository, InMemoryAssetRepository,
-        │                      SpringEventPublisher, MockMetricsCollector,
-        │                      SshMetricsCollector,
-        │                      JpaMetricSnapshotRepository, InMemoryMetricSnapshotRepository
-        ├── config/            BeanConfiguration, SchedulingConfiguration
-        ├── persistence/       AssetJpaEntity, AssetMapper,
-        │                      MetricSnapshotJpaEntity, MetricSnapshotMapper,
-        │                      SpringDataMetricSnapshotRepository, schema.sql
-        └── security/          EncryptedStringConverter
+├── src/main/java/com.infratrack/
+│   ├── domain/
+│   │   ├── model/             Asset, AssetId, IpAddress, Credentials, MetricSnapshot, enums
+│   │   └── event/             AssetCreatedEvent, AssetStatusChangedEvent, AssetDeletedEvent
+│   │
+│   ├── application/
+│   │   ├── port/input/        ManageAssetUseCase, MonitorAssetUseCase
+│   │   ├── port/output/       AssetRepository, MetricsCollector, MetricSnapshotRepository
+│   │   └── service/           AssetService, MonitoringService
+│   │
+│   └── infrastructure/
+│       ├── adapter/input/     AssetRestController, MetricsRestController, MetricsScheduler
+│       ├── adapter/input/dto/ Request/Response DTOs + mappers
+│       ├── adapter/output/    JPA repos, SSH collector, mocks, event publisher
+│       ├── config/            BeanConfiguration, SchedulingConfiguration
+│       ├── persistence/       JPA entities, mappers, schema.sql
+│       └── security/          EncryptedStringConverter (AES-256-GCM)
+│
+└── frontend/
+    ├── app/                   Next.js App Router (layout, page, globals.css)
+    ├── components/            Dashboard, AssetCard, MetricGauge, Sparkline, Header, StatusBadge
+    ├── hooks/                 useAssets (SWR hook for asset list)
+    ├── lib/                   API client, TypeScript interfaces
+    ├── docker/nginx.conf      Static serving + reverse proxy to backend
+    └── Dockerfile             Multi-stage: Node build → nginx serve (~25MB)
 ```
-
----
-
-## License
-
-This project is for demonstration and educational purposes.

@@ -5,9 +5,10 @@ Project guidance for [Claude Code](https://claude.ai/code) and contributor onboa
 ## Quick Start
 
 ```bash
-# Full demo — PostgreSQL + SSH target + app, all containerized
+# Full demo — PostgreSQL + SSH target + app + dashboard, all containerized
 export INFRATRACK_ENCRYPTION_KEY=$(openssl rand -base64 32)
 docker-compose up -d
+# Dashboard: http://localhost:3000   API: http://localhost:8080
 
 # Dev profile — H2 in-memory, no Docker required
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
@@ -16,9 +17,12 @@ docker-compose up -d
 docker-compose up -d postgres ssh-target-1
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=demo
 
+# Frontend dev — requires backend running (any mode)
+cd frontend && npm run dev    # http://localhost:3000
+
 # Build & test
 ./mvnw clean package          # Build JAR
-./mvnw test                   # Run all tests (81 passing)
+./mvnw test                   # Run all tests (91 passing)
 ./mvnw test -Dtest=<Class>    # Run a specific test class
 ```
 
@@ -91,13 +95,55 @@ Events are plain Java records — no Spring, no JPA. `SpringEventPublisher` impl
 
 `MetricsScheduler` triggers `collectAllActive()` on a configurable interval (default 60s). Each active asset gets its own Virtual Thread for parallel SSH collection. `MetricsRestController` exposes latest snapshot and historical data via REST.
 
+## Frontend
+
+React dashboard in `frontend/`. Next.js 15 with App Router, TypeScript, Tailwind CSS v4, Recharts, SWR.
+
+### Architecture
+
+- `layout.tsx` (server component) → `page.tsx` (server) → `Dashboard.tsx` (client, `"use client"`)
+- Each `AssetCard` owns its SWR call for metrics — avoids Rules of Hooks violation
+- `useAssets.ts` hook manages asset list only (single responsibility)
+- Static export (`output: 'export'`) — no Node.js server in production, nginx serves HTML
+
+### Component tree
+
+```
+Dashboard (client component, useAssets hook)
+├── Header (asset count, connection indicator)
+└── AssetCard × N (each owns useSWR for metrics)
+    ├── StatusBadge (ACTIVE/MAINTENANCE/INACTIVE pill)
+    └── MetricGauge × 3 (CPU, Memory, Disk)
+        └── Sparkline (Recharts LineChart, last 20 data points)
+```
+
+### Data fetching
+
+- SWR with `refreshInterval: 60000` for automatic 60s polling
+- `API_BASE_URL = ''` (empty) — relative URLs work in both dev (Next.js rewrites) and Docker (nginx proxy)
+- History endpoint (`/metrics/history?limit=20`) provides both latest value and sparkline data
+
+### Frontend Docker
+
+- Multi-stage: `node:20-alpine` build → `nginx:alpine` serve (~25MB final image)
+- nginx serves static files at `/` and reverse proxies `/api/` to `app:8080`
+- No CORS config on Spring Boot — same-origin via nginx
+
+### Design system — Style C (Hybrid Ops/Modern)
+
+- Dark theme: `#0c0f14` (background), `#111621` (cards)
+- Sans-serif base + monospace for technical data (hostnames, IPs, metrics)
+- Border-left 3px encodes asset status: green (active), amber (maintenance), gray (inactive)
+- Metric colors by threshold: green (0-60%), amber (60-80%), red (80-100%)
+- Sparklines with smooth curves, area fill gradient, dot on last point
+
 ## CI/CD
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) triggers on push and PR to `main`. Runs `./mvnw clean verify -Dspring.profiles.active=dev` — H2 + MockMetricsCollector, zero external services needed. Badge at top of README.
 
 Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 2 runs with JRE Alpine (~200MB final image). Layer caching via separated `pom.xml` copy + `dependency:resolve`.
 
-`docker-compose up -d` starts the full ecosystem: PostgreSQL + SSH target + Infratrack app. The app service overrides datasource URL and SSH port via environment variables for Docker-internal networking.
+`docker-compose up -d` starts the full ecosystem: PostgreSQL + SSH target + Infratrack app + frontend dashboard (4 services). The app service overrides datasource URL and SSH port via environment variables for Docker-internal networking.
 
 ## Security
 
@@ -140,7 +186,7 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 | 4.1 — Metrics Domain | ✅ Done | MetricSnapshot VO, MonitoringService, JPA layer, mock collector |
 | 4.2 — SSH Real | ✅ Done | SshMetricsCollector via SSHJ 0.40.0, Alpine containers in Docker Compose |
 | 4.3 — Scheduling + REST | ✅ Done | collectAllActive(), Virtual Threads, MetricsScheduler, MetricsRestController |
-| 5 — React Dashboard | Planned | Next.js 15 frontend with live metrics |
+| 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with SWR polling and Recharts sparklines |
 | 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build, full ecosystem containerized |
 
 ---
@@ -171,7 +217,7 @@ BEAN WIRING
   @Profile({"demo", "prod"}) and @Value("${infratrack.ssh.port:22}").
 • SshMetricsCollector parsing: done in Java with regex, not shell. Pattern: ([\d.]+)\s*id for CPU.
   Static parse methods are independently testable without SSH connections.
-• - SshMetricsCollector session handling: one Session per command — SSHJ channels are
+• SshMetricsCollector session handling: one Session per command — SSHJ channels are
   single-use. Reusing the same Session for multiple exec() calls throws
   "This session channel is all used up". The SSHClient connection is reused; only Sessions are not.
 • InMemoryMetricsSnapshotRepository (note: class name has plural 'Metrics') registered as
@@ -183,6 +229,14 @@ BEAN WIRING
   Both CreateAssetRequest and UpdateIpAddressRequest @Pattern updated to match.
   When app runs in Docker, asset IP must be the Docker hostname (web-server-01), not 127.0.0.1.
 
+EXCEPTION HANDLING
+• GlobalExceptionHandler (@RestControllerAdvice) handles all exceptions globally.
+  Do NOT add local @ExceptionHandler methods in controllers — local handlers take priority
+  over @RestControllerAdvice and will intercept exceptions before the global handler.
+• DuplicateIpAddressException → 409 Conflict (thrown by createAsset and updateAssetIpAddress).
+• AssetNotFoundException → 404 Not Found (thrown by findAsset and all orElseThrow calls).
+• updateAssetIpAddress checks existsByIpAddress but skips the check when newIp equals the
+  asset's current IP (no-op case).
 
 SCHEDULING
 • MetricsScheduler uses @Component (auto-detected). Reads infratrack.monitoring.interval-seconds
@@ -203,13 +257,24 @@ DOCKER & NETWORKING
 • App Dockerfile: multi-stage, eclipse-temurin:21-jdk-alpine (build) → eclipse-temurin:21-jre-alpine (run).
   Layer caching: pom.xml + dependency:resolve first, then source copy.
   chmod +x ./mvnw included for Windows Git execute bit stripping.
-• docker-compose app service overrides:
+• docker-compose: 4 services (postgres, ssh-target-1, app, frontend) on infratrack-network.
   - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/infratrack (Docker-internal, not localhost:5433)
   - INFRATRACK_SSH_PORT=22 (Docker-internal, not 2222)
   - INFRATRACK_ENCRYPTION_KEY=${INFRATRACK_ENCRYPTION_KEY:-yt1+CDm1+...} (host env var with fallback)
   - depends_on postgres with service_healthy condition. No depends_on for ssh-target-1.
 • When app runs in Docker, asset IP must be `web-server-01` (Docker hostname), not `127.0.0.1`.
   When app runs on host, asset IP is `127.0.0.1`.
+
+FRONTEND
+• Next.js 15 static export (output: 'export') — no Node.js server in production.
+• nginx serves static files + reverse proxies /api/ to app:8080. Zero CORS config on Spring Boot.
+• SWR per-component pattern: each AssetCard owns its useSWR call for metrics.
+  Never call useSWR inside .map() or conditionals — Rules of Hooks violation.
+• API_BASE_URL = '' (empty string). Relative URLs work in dev (Next.js rewrites) and Docker (nginx).
+• next.config.ts has both `output: 'export'` and `rewrites` — generates harmless build warning. Ignore it.
+• Recharts does not support server components — all chart components must be in "use client" files.
+• Frontend Dockerfile: node:20-alpine build → nginx:alpine serve (~25MB final image).
+• Tailwind v4 uses CSS-first config (@import "tailwindcss" + @theme {} in globals.css).
 
 CI/CD
 • GitHub Actions: .github/workflows/ci.yml. Temurin 21, Maven cache, chmod +x ./mvnw.
