@@ -5,12 +5,16 @@ import MetricGauge from "./MetricGauge";
 import StatusBadge from "./StatusBadge";
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
+import { useState } from "react";
+import EditAssetPanel from "./EditAssetPanel";
 
 interface AssetCardProps {
   asset: Asset;
 }
 
 export default function AssetCard({ asset }: AssetCardProps) {
+  const [isEditing, setIsEditing] = useState(false);
+
   const { data: metrics = [] } = useSWR<MetricSnapshot[]>(
     `/api/v1/assets/${asset.id}/metrics/history?limit=20`,
     fetcher,
@@ -26,40 +30,52 @@ export default function AssetCard({ asset }: AssetCardProps) {
   }[asset.status];
 
   return (
-    <div
-      style={{ borderLeft: `3px solid ${borderColor}` }}
-      className="bg-[#111621] rounded-lg p-5 border border-[#1a2535]"
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <span className="text-[#e4e8ee] font-semibold">{asset.name}</span>
-          <p className="text-[#4a5568] text-xs font-mono mt-0.5">
-            {asset.type} · {asset.ipAddress}
-          </p>
+    <>
+      <div
+        style={{ borderLeft: `3px solid ${borderColor}` }}
+        className="bg-[#111621] rounded-lg p-5 border border-[#1a2535]"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <span className="text-[#e4e8ee] font-semibold">{asset.name}</span>
+            <p className="text-[#4a5568] text-xs font-mono mt-0.5">
+              {asset.type} · {asset.ipAddress}
+            </p>
+          </div>
+          <StatusBadge assetStatus={asset.status} />
+          <button
+            type="button"
+            onClick={() => setIsEditing(!isEditing)}
+            className="text-[#4a5568] text-xs font-mono hover:text-[#e4e8ee] px-2 py-1"
+          >
+            {isEditing ? "Close" : "Edit"}
+          </button>
         </div>
-        <StatusBadge assetStatus={asset.status} />
+        {latest ? (
+          <div className="grid grid-cols-3 gap-4">
+            <MetricGauge
+              label="CPU Usage"
+              value={latest.cpuUsage}
+              history={metrics.map((m) => m.cpuUsage)}
+            />
+            <MetricGauge
+              label="Memory Usage"
+              value={latest.memoryUsage}
+              history={metrics.map((m) => m.memoryUsage)}
+            />
+            <MetricGauge
+              label="Disk Usage"
+              value={latest.diskUsage}
+              history={metrics.map((m) => m.diskUsage)}
+            />
+          </div>
+        ) : (
+          <p className="text-[#4a5568] text-sm font-mono">No data available</p>
+        )}
       </div>
-      {latest ? (
-        <div className="grid grid-cols-3 gap-4">
-          <MetricGauge
-            label="CPU Usage"
-            value={latest.cpuUsage}
-            history={metrics.map((m) => m.cpuUsage)}
-          />
-          <MetricGauge
-            label="Memory Usage"
-            value={latest.memoryUsage}
-            history={metrics.map((m) => m.memoryUsage)}
-          />
-          <MetricGauge
-            label="Disk Usage"
-            value={latest.diskUsage}
-            history={metrics.map((m) => m.diskUsage)}
-          />
-        </div>
-      ) : (
-        <p className="text-[#4a5568] text-sm font-mono">No data available</p>
+      {isEditing && (
+        <EditAssetPanel asset={asset} onClose={() => setIsEditing(false)} />
       )}
-    </div>
+    </>
   );
 }
