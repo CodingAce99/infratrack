@@ -110,11 +110,17 @@ React dashboard in `frontend/`. Next.js 15 with App Router, TypeScript, Tailwind
 
 ```
 Dashboard (client component, useAssets hook)
-├── Header (asset count, connection indicator)
-└── AssetCard × N (each owns useSWR for metrics)
+├── Header (asset count, connection indicator, "+ Add Asset" button)
+│   └── CreateAssetModal (modal with 5-field form, POST /api/v1/assets)
+└── AssetCard × N (each owns useSWR for metrics, manages its own isEditing state)
     ├── StatusBadge (ACTIVE/MAINTENANCE/INACTIVE pill)
-    └── MetricGauge × 3 (CPU, Memory, Disk)
-        └── Sparkline (Recharts LineChart, last 20 data points)
+    ├── MetricGauge × 3 (CPU, Memory, Disk)
+    │   └── Sparkline (Recharts LineChart, last 20 data points)
+    └── EditAssetPanel (inline, opens on Edit click)
+        ├── Status section → PUT /{id}/status
+        ├── IP section → PUT /{id}/ip
+        ├── Credentials section → PUT /{id}/credentials
+        └── ConfirmDialog (reusable: message, onConfirm, onCancel) → DELETE /{id}
 ```
 
 ### Data fetching
@@ -122,6 +128,7 @@ Dashboard (client component, useAssets hook)
 - SWR with `refreshInterval: 60000` for automatic 60s polling
 - `API_BASE_URL = ''` (empty) — relative URLs work in both dev (Next.js rewrites) and Docker (nginx proxy)
 - History endpoint (`/metrics/history?limit=20`) provides both latest value and sparkline data
+- **Mutations:** `CreateAssetModal` and `EditAssetPanel` call mutation functions in `lib/api.ts` (createAsset, updateStatus, updateIp, updateCredentials, deleteAsset). Each throws `ApiError` with HTTP status on failure (409 duplicate IP, 400 validation, 404 not found). After success, components call `useSWRConfig().mutate('/api/v1/assets')` to revalidate the list — no prop drilling, no manual state management. After delete, no extra cleanup is needed: React unmounts the card and SWR garbage-collects the metrics cache automatically.
 
 ### Frontend Docker
 
@@ -186,7 +193,7 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 | 4.1 — Metrics Domain | ✅ Done | MetricSnapshot VO, MonitoringService, JPA layer, mock collector |
 | 4.2 — SSH Real | ✅ Done | SshMetricsCollector via SSHJ 0.40.0, Alpine containers in Docker Compose |
 | 4.3 — Scheduling + REST | ✅ Done | collectAllActive(), Virtual Threads, MetricsScheduler, MetricsRestController |
-| 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with SWR polling and Recharts sparklines |
+| 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with full CRUD from UI (modal create, inline edit, delete with confirmation), SWR polling and Recharts sparklines |
 | 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build, full ecosystem containerized |
 
 ---
@@ -275,6 +282,21 @@ FRONTEND
 • Recharts does not support server components — all chart components must be in "use client" files.
 • Frontend Dockerfile: node:20-alpine build → nginx:alpine serve (~25MB final image).
 • Tailwind v4 uses CSS-first config (@import "tailwindcss" + @theme {} in globals.css).
+• React 19: `React.FormEvent` is deprecated. Use `React.SyntheticEvent<HTMLFormElement>` for
+  onSubmit handler types. VS Code flags the deprecated form correctly.
+• Edit panel state ownership: `isEditing` lives inside each AssetCard via useState. Do NOT
+  lift to Dashboard or track a global editingAssetId — each card's panel is fully independent.
+• Save-per-section, not Save-all: the backend exposes three separate endpoints for status, IP
+  and credentials. Each section in EditAssetPanel has its own Save button mapped 1:1. Do NOT
+  attempt a single "Save all" — implementing it would require three sequential calls with
+  partial failure handling, effectively a distributed transaction without atomicity guarantees.
+• Credentials UX: password is never returned by AssetResponse (security by construction), so
+  the password field in EditAssetPanel is always empty when the panel opens. Both username
+  and password are required for submission — there is no "username-only" path. If user wants
+  to change only username, they must re-enter the current password.
+• Mutations use useSWRConfig().mutate('/api/v1/assets') — exact key match required. SWR
+  deduplicates by string identity, so '/api/v1/assets/' (trailing slash) silently fails to
+  revalidate. Verify the key in hooks/useAssets.ts before calling mutate elsewhere.
 
 CI/CD
 • GitHub Actions: .github/workflows/ci.yml. Temurin 21, Maven cache, chmod +x ./mvnw.

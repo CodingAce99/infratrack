@@ -14,7 +14,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 
 - **Hexagonal Architecture** — Domain layer with zero framework dependencies. Swappable adapters for REST, JPA, SSH, and in-memory storage.
 - **SSH Monitoring** — Proactive metric collection via SSHJ. A scheduler connects to assets over SSH, extracts CPU/memory/disk metrics, and persists historical data — all parallelized with Virtual Threads.
-- **React Dashboard** — Real-time monitoring UI built with Next.js 15 and TypeScript. Auto-refreshing metrics with SWR polling, sparkline charts via Recharts, and a dark ops-themed interface. Served as a static export through nginx with reverse proxy to the backend — zero CORS configuration needed.
+- **React Dashboard with full CRUD** — Real-time monitoring UI built with Next.js 15 and TypeScript. Create, edit, and delete assets directly from the dashboard via modal and inline edit panels. Auto-refreshing metrics with SWR polling, sparkline charts via Recharts, and a dark ops-themed interface. Served as a static export through nginx with reverse proxy to the backend — zero CORS configuration needed.
 - **Domain Events** — Async event bus decouples asset lifecycle from downstream reactions. Events are pure Java records; adding new listeners requires zero changes to existing code.
 - **Security by construction** — SSH credentials encrypted with AES-256-GCM at rest. API responses structurally cannot contain passwords (`AssetResponse` has no password field — not hidden, *absent*).
 - **CI/CD** — GitHub Actions pipeline validates every push. Multi-stage Docker build produces a minimal JRE image. `docker-compose up` starts the entire ecosystem in one command.
@@ -48,6 +48,107 @@ The domain knows nothing about Spring, JPA, or HTTP. Value objects (`IpAddress`,
 
 Two dedicated mapper layers keep concerns separated: `AssetDtoMapper` translates between HTTP and the domain, while `AssetMapper` translates between the domain and JPA entities.
 
+### Hexagonal layout
+
+Dependencies always point inward toward the domain. Solid arrows are runtime dependencies (`uses`); dashed arrows are interface implementations (`implements`).
+
+```mermaid
+flowchart TB
+    subgraph Input["📥 Input Adapters (infrastructure)"]
+        REST["REST Controllers<br/>AssetRestController<br/>MetricsRestController"]
+        Sched["MetricsScheduler<br/>@Scheduled"]
+    end
+
+    subgraph App["⚙️ Application Layer"]
+        InPorts["Input Ports<br/>ManageAssetUseCase<br/>MonitorAssetUseCase"]
+        Services["Use Case Implementations<br/>AssetService<br/>MonitoringService"]
+        OutPorts["Output Ports<br/>AssetRepository<br/>MetricsCollector<br/>MetricSnapshotRepository<br/>DomainEventPublisher"]
+    end
+
+    subgraph Domain["💎 Domain — Pure Java, zero framework"]
+        Model["Entities & Value Objects<br/>Asset · IpAddress · Credentials<br/>MetricSnapshot · AssetId"]
+        Events["Domain Events<br/>AssetCreated · AssetStatusChanged<br/>AssetDeleted"]
+    end
+
+    subgraph Output["📤 Output Adapters (infrastructure)"]
+        JPA["JPA Adapters<br/>JpaAssetRepository<br/>JpaMetricSnapshotRepository<br/>+ AES-256-GCM converter"]
+        SSH["SSH Adapter<br/>SshMetricsCollector<br/>SSHJ 0.40.0"]
+        EventPub["Event Publisher<br/>SpringEventPublisher"]
+    end
+
+    REST --> InPorts
+    Sched --> InPorts
+    InPorts -.implemented by.-> Services
+    Services --> Model
+    Services --> Events
+    Services --> OutPorts
+    OutPorts -.implemented by.-> JPA
+    OutPorts -.implemented by.-> SSH
+    OutPorts -.implemented by.-> EventPub
+    JPA --> Model
+    SSH --> Model
+    EventPub --> Events
+
+    style REST fill:#1e3a5f,stroke:#3b82f6,color:#e4e8ee
+    style Sched fill:#1e3a5f,stroke:#3b82f6,color:#e4e8ee
+    style Services fill:#1e3a5f,stroke:#3b82f6,color:#e4e8ee
+    style JPA fill:#1e3a5f,stroke:#3b82f6,color:#e4e8ee
+    style SSH fill:#1e3a5f,stroke:#3b82f6,color:#e4e8ee
+    style EventPub fill:#1e3a5f,stroke:#3b82f6,color:#e4e8ee
+    style InPorts fill:#2a2f3a,stroke:#6b7280,color:#e4e8ee
+    style OutPorts fill:#2a2f3a,stroke:#6b7280,color:#e4e8ee
+    style Model fill:#1a4d2e,stroke:#10b981,color:#e4e8ee
+    style Events fill:#1a4d2e,stroke:#10b981,color:#e4e8ee
+```
+
+### Runtime data flow
+
+The system has two pipelines that run independently. The **write pipeline** is time-driven: every 60 seconds the scheduler fans out one Virtual Thread per active asset and persists fresh metrics. The **read pipeline** is on-demand: the browser polls the API every 60 seconds via SWR, and nginx forwards `/api/*` to the Spring Boot backend.
+
+```mermaid
+flowchart LR
+    subgraph Write["⏱️ Write pipeline — every 60s"]
+        Sched["MetricsScheduler<br/>@Scheduled"]
+        MonSvc["MonitoringService<br/>collectAllActive()"]
+        VT(["Virtual Thread<br/>per asset"])
+        SSH["SshMetricsCollector<br/>SSHJ 0.40.0"]
+        Alpine[("Alpine SSH<br/>target")]
+        DB[("PostgreSQL 17<br/>metrics history")]
+
+        Sched --> MonSvc
+        MonSvc --> VT
+        VT --> SSH
+        SSH -->|exec top, free, df| Alpine
+        Alpine -->|raw text| SSH
+        SSH -->|MetricSnapshot| DB
+    end
+
+    subgraph Read["🌐 Read pipeline — on demand"]
+        Browser["Browser<br/>localhost:3000"]
+        Nginx["nginx<br/>reverse proxy"]
+        REST["MetricsRestController<br/>/api/v1/assets/{id}/metrics/history"]
+        DB2[("PostgreSQL 17<br/>metrics history")]
+
+        Browser -->|SWR poll 60s| Nginx
+        Nginx -->|/api/*| REST
+        REST -->|read| DB2
+        DB2 -->|JSON| REST
+        REST --> Nginx
+        Nginx --> Browser
+    end
+
+    style Sched fill:#1e3a5f,stroke:#3b82f6,color:#e4e8ee
+    style MonSvc fill:#1e3a5f,stroke:#3b82f6,color:#e4e8ee
+    style SSH fill:#1e3a5f,stroke:#3b82f6,color:#e4e8ee
+    style REST fill:#1e3a5f,stroke:#3b82f6,color:#e4e8ee
+    style DB fill:#1a4d2e,stroke:#10b981,color:#e4e8ee
+    style DB2 fill:#1a4d2e,stroke:#10b981,color:#e4e8ee
+    style Alpine fill:#1a4d2e,stroke:#10b981,color:#e4e8ee
+    style VT fill:#2a2f3a,stroke:#6b7280,color:#e4e8ee
+    style Nginx fill:#2a2f3a,stroke:#6b7280,color:#e4e8ee
+    style Browser fill:#2a2f3a,stroke:#6b7280,color:#e4e8ee
+```
+
 **Virtual Threads**
 
 The monitoring scheduler collects metrics from all active assets in parallel using Java 21 Virtual Threads. Each SSH connection runs in its own Virtual Thread via `Thread.startVirtualThread()` — lightweight, non-blocking, and with per-asset fault isolation. A single failed connection never blocks the collection of other assets.
@@ -65,6 +166,8 @@ Asset lifecycle changes publish domain events through a port interface (`DomainE
 ### Frontend
 
 The React dashboard (`frontend/`) is a Next.js 15 static export served by nginx. It connects to the backend API through nginx reverse proxy — both frontend and API are same-origin from the browser's perspective, eliminating CORS entirely. SWR handles data fetching with automatic 60-second polling. Each `AssetCard` component owns its own metrics SWR call, following the single-responsibility principle.
+
+The dashboard supports full asset management from the UI: a "+ Add Asset" modal for creation, an inline edit panel on each card for status, IP and credential updates (one Save button per section, mapped 1:1 to its REST endpoint), and a confirmation dialog for deletion. Mutations use `useSWRConfig().mutate` to revalidate the asset list after each successful operation — no manual state management, no prop drilling.
 
 ---
 
@@ -96,6 +199,8 @@ curl -X POST http://localhost:8080/api/v1/assets \
 # Or query the API directly — wait 60s for the scheduler, then:
 curl http://localhost:8080/api/v1/assets/{id}/metrics/history
 ```
+
+> **Tip:** Instead of using curl, you can create the asset directly from the dashboard at `localhost:3000` — click "+ Add Asset" in the header. The same modal supports status, IP and credential updates inline on each card.
 
 ### Option 2: Dev mode (no Docker needed)
 
@@ -240,7 +345,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | 2 — Asset CRUD + Encryption | ✅ Done | Full CRUD with AES-256-GCM encrypted credentials |
 | 3 — DTO Layer + Domain Events | ✅ Done | Request/Response DTOs, Bean Validation, event bus |
 | 4 — SSH Monitoring | ✅ Done | Metrics collection, persistence, SSH connections, REST API |
-| 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with SWR polling and Recharts sparklines |
+| 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with full CRUD, SWR polling and Recharts sparklines |
 | 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build |
 
 ---
@@ -274,9 +379,10 @@ infratrack/
 │
 └── frontend/
     ├── app/                   Next.js App Router (layout, page, globals.css)
-    ├── components/            Dashboard, AssetCard, MetricGauge, Sparkline, Header, StatusBadge
+    ├── components/            Dashboard, AssetCard, MetricGauge, Sparkline, Header, StatusBadge,
+    │                          CreateAssetModal, EditAssetPanel, ConfirmDialog
     ├── hooks/                 useAssets (SWR hook for asset list)
-    ├── lib/                   API client, TypeScript interfaces
+    ├── lib/                   API client (fetcher + mutation functions + ApiError), TypeScript interfaces
     ├── docker/nginx.conf      Static serving + reverse proxy to backend
     └── Dockerfile             Multi-stage: Node build → nginx serve (~25MB)
 ```
