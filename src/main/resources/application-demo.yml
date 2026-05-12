@@ -19,10 +19,6 @@ spring:
     password: infratrack_pass
     driver-class-name: org.postgresql.Driver
 
-  sql:
-    init:
-      mode: always      # Ejecuta schema.sql en cada inicio
-
   jpa:
     hibernate:
       ddl-auto: validate # Validar esquema, no modificar

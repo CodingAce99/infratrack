@@ -26,7 +26,7 @@ spring:
   
   jpa:
     hibernate:
-      ddl-auto: create-drop  # Recrea la BD cada vez (solo en dev)
+      ddl-auto: validate
     show-sql: true
 
 # Deshabilitamos cifrado en dev para facilitar debugging
