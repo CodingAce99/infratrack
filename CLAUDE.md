@@ -50,9 +50,11 @@ com.infratrack/
     │                        SshMetricsCollector, JpaMetricSnapshotRepository,
     │                        InMemoryMetricSnapshotRepository
     ├── config/              BeanConfiguration, SchedulingConfiguration
-    ├── persistence/         JPA entities, mappers (Domain ↔ JPA), schema.sql
+    ├── persistence/         JPA entities, mappers (Domain ↔ JPA)
     └── security/            EncryptedStringConverter (AES-256-GCM)
 ```
+
+Schema is managed by Flyway migrations under `src/main/resources/db/migration/` (V1__initial_schema.sql is the baseline). See the Database section in internal notes for operational details.
 
 ### Design Principles
 
@@ -195,6 +197,11 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 | 4.3 — Scheduling + REST | ✅ Done | collectAllActive(), Virtual Threads, MetricsScheduler, MetricsRestController |
 | 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with full CRUD from UI (modal create, inline edit, delete with confirmation), SWR polling and Recharts sparklines |
 | 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build, full ecosystem containerized |
+| 6.5 — Flyway | ✅ Done | Schema versioning via Flyway 11; `schema.sql` replaced by `V1__initial_schema.sql`; `ddl-auto: validate` everywhere |
+| 7 — Authentication & Authorization | ⏳ Next | Spring Security + JWT stateless, ADMIN/VIEWER roles, BCrypt, login UI |
+| 8 — Observability | Pending | Spring Actuator, Micrometer metrics, structured logging with MDC |
+| 9 — Event Streaming | Pending | Apache Kafka pipeline for metrics + alerts (KRaft mode) |
+| 10 — Frontend Polish | Pending | Animations, loading skeletons, responsive design, dark/light mode |
 
 ---
 
@@ -207,8 +214,35 @@ DATABASE & SCHEMA
 • Encryption key property path: `infratrack.encryption.key` in application.yml.
   Do NOT use `infratrack.security.encryption.key` (legacy path, no longer valid).
 • `defer-datasource-initialization=true` must NOT be used — it inverts SQL init / validate order.
-• `ddl-auto: update` was discarded because Hibernate 6.x silently aborts DDL generation when
-  EncryptedStringConverter lacks a no-arg constructor. Manual schema.sql is the solution.
+• `ddl-auto: validate` in every profile. Hibernate never writes schema — Flyway is the sole owner.
+  Dev profile was changed from `create-drop` to `validate` in Sprint 6.5 (create-drop is
+  incompatible with Flyway: Hibernate would drop the tables Flyway just created).
+
+FLYWAY (added Sprint 6.5)
+• Migrations live in `src/main/resources/db/migration/` and follow the strict naming
+  `V<version>__<description>.sql`. Flyway parses the version from the filename and
+  applies migrations in order, recording each in `flyway_schema_history`.
+• Two dependencies required since Flyway 10+: `flyway-core` (engine) and
+  `flyway-database-postgresql` (PostgreSQL adapter). H2 (dev profile) is supported by
+  core directly — no extra artifact needed. Do NOT specify versions in pom.xml;
+  Spring Boot 3.5 BOM resolves to Flyway 11.x.
+• `baseline-on-migrate: true` in application.yml — essential for environments that had
+  pre-Flyway schema. Without it, Flyway fails with "table already exists" on first run
+  against a populated database.
+• Migrations are immutable once applied. Flyway computes a checksum and refuses to run
+  if a previously-applied migration has been modified. Schema changes always require a
+  NEW V file, never editing an old one.
+• `IF NOT EXISTS` clauses are anti-Flyway and must NOT appear in migration files.
+  Flyway guarantees exactly-once execution; defensive clauses would mask real errors.
+• `flyway_schema_history` row types:
+  - `BASELINE` — DB was pre-populated when Flyway first ran (baseline-on-migrate kicked in)
+  - `SQL` — Flyway executed the migration from scratch
+  Distinction matters for debugging "why is my migration not running?" questions.
+• When evolving schema (e.g., adding a table in Sprint 7.1), the workflow is:
+  1. Create `V<n>__<description>.sql` with the DDL/DML
+  2. Run `./mvnw test` → Flyway picks it up automatically
+  3. Run `docker-compose up -d --build` → Flyway applies to PostgreSQL
+  4. Verify with `SELECT * FROM flyway_schema_history;`
 
 BEAN WIRING
 • JpaAssetRepository has @Repository (so Spring autoconfigures SpringDataAssetRepository)

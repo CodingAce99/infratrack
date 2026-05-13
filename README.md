@@ -18,6 +18,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 - **Domain Events** — Async event bus decouples asset lifecycle from downstream reactions. Events are pure Java records; adding new listeners requires zero changes to existing code.
 - **Security by construction** — SSH credentials encrypted with AES-256-GCM at rest. API responses structurally cannot contain passwords (`AssetResponse` has no password field — not hidden, *absent*).
 - **CI/CD** — GitHub Actions pipeline validates every push. Multi-stage Docker build produces a minimal JRE image. `docker-compose up` starts the entire ecosystem in one command.
+- **Versioned schema** — Database changes managed by Flyway migrations. Each schema change is a numbered, immutable SQL file applied incrementally, recorded in `flyway_schema_history`.
 - **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + real SSH to Alpine containers), `prod` (real infrastructure).
 - **Virtual Threads** — Java 21 Virtual Threads for non-blocking parallel SSH collection with per-asset fault isolation.
 - **91 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
@@ -31,6 +32,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 | Runtime | Java 21 LTS (Virtual Threads) |
 | Framework | Spring Boot 3.5 |
 | Database | PostgreSQL 17 (Docker) |
+| Schema migrations | Flyway 11 |
 | Encryption | AES-256-GCM via JPA AttributeConverter |
 | SSH | SSHJ 0.40.0 |
 | Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS v4, Recharts, SWR |
@@ -347,6 +349,11 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | 4 — SSH Monitoring | ✅ Done | Metrics collection, persistence, SSH connections, REST API |
 | 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with full CRUD, SWR polling and Recharts sparklines |
 | 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build |
+| 6.5 — Flyway | ✅ Done | Versioned schema migrations replacing static schema.sql |
+| 7 — Authentication & Authorization | ⏳ Next | Spring Security + JWT stateless, ADMIN/VIEWER roles, BCrypt, login UI |
+| 8 — Observability | Pending | Spring Actuator, Micrometer metrics, structured logging with MDC |
+| 9 — Event Streaming | Pending | Apache Kafka pipeline for metrics + alerts (KRaft mode) |
+| 10 — Frontend Polish | Pending | Animations, loading skeletons, responsive design, dark/light mode |
 
 ---
 
@@ -374,8 +381,13 @@ infratrack/
 │       ├── adapter/input/dto/ Request/Response DTOs + mappers
 │       ├── adapter/output/    JPA repos, SSH collector, mocks, event publisher
 │       ├── config/            BeanConfiguration, SchedulingConfiguration
-│       ├── persistence/       JPA entities, mappers, schema.sql
+│       ├── persistence/       JPA entities, mappers
 │       └── security/          EncryptedStringConverter (AES-256-GCM)
+│
+├── src/main/resources/
+│   ├── db/migration/          Flyway migrations (V1__initial_schema.sql, …)
+│   ├── application.yml        Base config (Flyway, JPA, datasource)
+│   └── application-{dev,demo,prod}.yml   Profile-specific overrides
 │
 └── frontend/
     ├── app/                   Next.js App Router (layout, page, globals.css)
