@@ -2,19 +2,21 @@ package com.infratrack.infrastructure.config;
 
 import com.infratrack.application.port.input.ManageAssetUseCase;
 import com.infratrack.application.port.input.MonitorAssetUseCase;
-import com.infratrack.application.port.output.AssetRepository;
-import com.infratrack.application.port.output.DomainEventPublisher;
-import com.infratrack.application.port.output.MetricSnapshotRepository;
-import com.infratrack.application.port.output.MetricsCollector;
+import com.infratrack.application.port.output.*;
 import com.infratrack.application.service.AssetService;
 import com.infratrack.application.service.MonitoringService;
 import com.infratrack.infrastructure.adapter.output.*;
 import com.infratrack.infrastructure.persistence.SpringDataAssetRepository;
 import com.infratrack.infrastructure.persistence.SpringDataMetricSnapshotRepository;
+import com.infratrack.infrastructure.persistence.SpringDataUserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import com.infratrack.application.port.output.PasswordEncoder;
+import com.infratrack.application.port.output.UserRepository;
+import com.infratrack.infrastructure.adapter.output.BCryptPasswordEncoderAdapter;
+import com.infratrack.infrastructure.adapter.output.JpaUserRepository;
 
 @Configuration
 public class BeanConfiguration {
@@ -70,6 +72,19 @@ public class BeanConfiguration {
     public MetricsCollector sshMetricsCollector(
             @Value("${infratrack.ssh.port:22}") int sshPort) {
         return new SshMetricsCollector(sshPort);
+    }
+
+    // --- User beans ---
+
+    @Bean
+    @Profile({"demo", "prod"})
+    public UserRepository jpaUserRepository(SpringDataUserRepository springRepo) {
+        return new JpaUserRepository(springRepo);
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoderAdapter();
     }
 }
 

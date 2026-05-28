@@ -3,9 +3,11 @@ package com.infratrack.infrastructure.adapter.input;
 import com.infratrack.application.port.input.MonitorAssetUseCase;
 import com.infratrack.domain.model.AssetId;
 import com.infratrack.domain.model.MetricSnapshot;
+import com.infratrack.infrastructure.config.SecurityConfig;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -19,6 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @DisplayName("MetricsRestController")
 @WebMvcTest(MetricsRestController.class)
+@Import(SecurityConfig.class)
 public class MetricsRestControllerTest {
 
     @Autowired

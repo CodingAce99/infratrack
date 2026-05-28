@@ -4,12 +4,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.infratrack.application.port.input.ManageAssetUseCase;
 import com.infratrack.domain.model.*;
 import com.infratrack.infrastructure.adapter.input.dto.CreateAssetRequest;
+import com.infratrack.infrastructure.config.SecurityConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -26,6 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @DisplayName("AssetRestController")
 @WebMvcTest(AssetRestController.class)
+@Import(SecurityConfig.class)
 public class AssetRestControllerTest {
 
     @Autowired

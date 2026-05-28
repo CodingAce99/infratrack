@@ -113,6 +113,14 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
+        <!-- Spring Security — added for BCryptPasswordEncoder (Sprint 7.1).
+        SecurityConfig placeholder disables auto-configured HTTP Basic auth.
+        Real SecurityFilterChain is wired in Sprint 7.3. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
