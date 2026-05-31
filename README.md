@@ -21,7 +21,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 - **Versioned schema** — Database changes managed by Flyway migrations. Each schema change is a numbered, immutable SQL file applied incrementally, recorded in `flyway_schema_history`.
 - **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + real SSH to Alpine containers), `prod` (real infrastructure).
 - **Virtual Threads** — Java 21 Virtual Threads for non-blocking parallel SSH collection with per-asset fault isolation.
-- **91 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
+- **112 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
 
 ---
 
@@ -302,7 +302,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 
 ## Testing
 
-**91 tests** passing across four layers:
+**112 tests** passing across four layers:
 
 | Layer | Strategy | Spring context |
 |-------|----------|----------------|
@@ -350,7 +350,11 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with full CRUD, SWR polling and Recharts sparklines |
 | 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build |
 | 6.5 — Flyway | ✅ Done | Versioned schema migrations replacing static schema.sql |
-| 7 — Authentication & Authorization | ⏳ Next | Spring Security + JWT stateless, ADMIN/VIEWER roles, BCrypt, login UI |
+| 7.1 — User persistence | ✅ Done | User domain (Username, EncodedPassword, UserRole), JPA + BCrypt, seed admin/viewer via Flyway V2/V3 |
+| 7.2 — JWT + login | ⏳ In progress | Login use case + `POST /api/v1/auth/login` returning a signed JWT |
+| 7.3 — Security filter + roles | Pending | Real `SecurityFilterChain`, role enforcement (ADMIN write / VIEWER read) |
+| 7.4 — Login UI + token storage | Pending | Frontend login page, token in React context |
+| 7.5 — Protected routes + 401/403 | Pending | End-to-end auth flow from the browser |
 | 8 — Observability | Pending | Spring Actuator, Micrometer metrics, structured logging with MDC |
 | 9 — Event Streaming | Pending | Apache Kafka pipeline for metrics + alerts (KRaft mode) |
 | 10 — Frontend Polish | Pending | Animations, loading skeletons, responsive design, dark/light mode |
@@ -368,20 +372,24 @@ infratrack/
 │
 ├── src/main/java/com.infratrack/
 │   ├── domain/
-│   │   ├── model/             Asset, AssetId, IpAddress, Credentials, MetricSnapshot, enums
-│   │   └── event/             AssetCreatedEvent, AssetStatusChangedEvent, AssetDeletedEvent
+│   │   ├── model/             Asset family (Asset, AssetId, IpAddress, Credentials, MetricSnapshot)
+│   │   │                      + User family (User, UserId, Username, EncodedPassword, UserRole)
+│   │   ├── event/             AssetCreatedEvent, AssetStatusChangedEvent, AssetDeletedEvent
+│   │   └── exception/         Domain exceptions (InvalidUsernameException, UserAlreadyExistsException, …)
 │   │
 │   ├── application/
 │   │   ├── port/input/        ManageAssetUseCase, MonitorAssetUseCase
-│   │   ├── port/output/       AssetRepository, MetricsCollector, MetricSnapshotRepository
+│   │   ├── port/output/       AssetRepository, MetricsCollector, MetricSnapshotRepository,
+│   │   │                      UserRepository, PasswordEncoder
 │   │   └── service/           AssetService, MonitoringService
 │   │
 │   └── infrastructure/
 │       ├── adapter/input/     AssetRestController, MetricsRestController, MetricsScheduler
 │       ├── adapter/input/dto/ Request/Response DTOs + mappers
-│       ├── adapter/output/    JPA repos, SSH collector, mocks, event publisher
-│       ├── config/            BeanConfiguration, SchedulingConfiguration
-│       ├── persistence/       JPA entities, mappers
+│       ├── adapter/output/    JPA repos (incl. JpaUserRepository), SSH collector, mocks,
+│       │                      event publisher, BCryptPasswordEncoderAdapter
+│       ├── config/            BeanConfiguration, SchedulingConfiguration, SecurityConfig
+│       ├── persistence/       JPA entities (incl. UserJpaEntity), mappers
 │       └── security/          EncryptedStringConverter (AES-256-GCM)
 │
 ├── src/main/resources/

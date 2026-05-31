@@ -22,7 +22,7 @@ cd frontend && npm run dev    # http://localhost:3000
 
 # Build & test
 ./mvnw clean package          # Build JAR
-./mvnw test                   # Run all tests (91 passing)
+./mvnw test                   # Run all tests (112 passing)
 ./mvnw test -Dtest=<Class>    # Run a specific test class
 ```
 
@@ -33,13 +33,14 @@ Strict layer boundaries enforced by package structure. The domain has **zero fra
 ```
 com.infratrack/
 ├── domain/                → Pure Java. Entities, value objects, events.
-│   ├── model/               No Spring, no JPA.
+│   ├── model/               No Spring, no JPA. Asset + User aggregates.
 │   └── event/             → Domain events as plain Java records.
 │
 ├── application/           → Use cases and port interfaces. Framework-agnostic.
 │   ├── port/input/          ManageAssetUseCase, MonitorAssetUseCase
 │   ├── port/output/         AssetRepository, DomainEventPublisher,
-│   │                        MetricsCollector, MetricSnapshotRepository
+│   │                        MetricsCollector, MetricSnapshotRepository,
+│   │                        UserRepository, PasswordEncoder
 │   └── service/             AssetService, MonitoringService
 │
 └── infrastructure/        → Spring Boot, JPA, REST, SSH — all framework code lives here.
@@ -48,8 +49,10 @@ com.infratrack/
     ├── adapter/output/      JpaAssetRepository, InMemoryAssetRepository,
     │                        SpringEventPublisher, MockMetricsCollector,
     │                        SshMetricsCollector, JpaMetricSnapshotRepository,
-    │                        InMemoryMetricSnapshotRepository
+    │                        InMemoryMetricSnapshotRepository, JpaUserRepository,
+    │                        BCryptPasswordEncoderAdapter
     ├── config/              BeanConfiguration, SchedulingConfiguration
+    │                        SecurityConfig
     ├── persistence/         JPA entities, mappers (Domain ↔ JPA)
     └── security/            EncryptedStringConverter (AES-256-GCM)
 ```
@@ -60,7 +63,7 @@ Schema is managed by Flyway migrations under `src/main/resources/db/migration/` 
 
 - **Dependency Rule:** dependencies always point inward toward the domain.
 - **Factory methods over constructors:** `Asset.create()` / `Asset.reconstitute()` for entities. `MetricSnapshot.of()` / `MetricSnapshot.reconstruct()` for value objects. `EventClass.of()` for events.
-- **Self-validating Value Objects:** `IpAddress`, `AssetId`, `Credentials`, `MetricSnapshot` reject invalid state at construction.
+- **Self-validating Value Objects:** `IpAddress`, `AssetId`, `Credentials`, `MetricSnapshot`, `Username`, `EncodedPassword`, `UserId` reject invalid state at construction.
 - **Security by construction:** `AssetResponse` has no `password` field — it is impossible to accidentally leak what does not exist.
 - **Explicit wiring:** beans are assembled in `BeanConfiguration`, not auto-detected via `@Service`. This makes the dependency graph visible and testable.
 - **Two mapper layers with distinct responsibilities:**
@@ -159,6 +162,7 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 | Layer | Mechanism |
 |-------|-----------|
 | At rest (DB) | AES-256-GCM via JPA `AttributeConverter` |
+| User passwords | BCrypt one-way hash via the `PasswordEncoder` port — never reversible, never AES-encrypted |
 | In transit | HTTPS / TLS 1.3 |
 | In responses | `AssetResponse` structurally excludes credentials |
 | In logs | `Credentials.toString()` omits password by design |
@@ -166,7 +170,7 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 
 ## Testing Strategy
 
-91 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
+112 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
 
 | Layer | Approach | Spring context? |
 |-------|----------|-----------------|
@@ -198,7 +202,11 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 | 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with full CRUD from UI (modal create, inline edit, delete with confirmation), SWR polling and Recharts sparklines |
 | 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build, full ecosystem containerized |
 | 6.5 — Flyway | ✅ Done | Schema versioning via Flyway 11; `schema.sql` replaced by `V1__initial_schema.sql`; `ddl-auto: validate` everywhere |
-| 7 — Authentication & Authorization | ⏳ Next | Spring Security + JWT stateless, ADMIN/VIEWER roles, BCrypt, login UI |
+| 7.1 — User persistence | ✅ Done | User domain (Username, EncodedPassword, UserRole), JPA + BCrypt, seed admin/viewer via Flyway V2/V3 |
+| 7.2 — JWT + login | ⏳ Next | Login use case + `POST /api/v1/auth/login` returning a signed JWT |
+| 7.3 — Security filter + roles | Pending | Real `SecurityFilterChain`, role enforcement (ADMIN write / VIEWER read) |
+| 7.4 — Login UI + token storage | Pending | Frontend login page, token in React context |
+| 7.5 — Protected routes + 401/403 | Pending | End-to-end auth flow from the browser |
 | 8 — Observability | Pending | Spring Actuator, Micrometer metrics, structured logging with MDC |
 | 9 — Event Streaming | Pending | Apache Kafka pipeline for metrics + alerts (KRaft mode) |
 | 10 — Frontend Polish | Pending | Animations, loading skeletons, responsive design, dark/light mode |
@@ -245,9 +253,20 @@ FLYWAY (added Sprint 6.5)
   4. Verify with `SELECT * FROM flyway_schema_history;`
 
 BEAN WIRING
-• JpaAssetRepository has @Repository (so Spring autoconfigures SpringDataAssetRepository)
-  but is NOT registered as a @Bean — it's instantiated manually via
-  `new JpaAssetRepository(springRepo)` to avoid duplicate bean conflicts.
+• JpaAssetRepository has NO @Repository annotation. It is the output adapter that implements
+  the AssetRepository port and wraps SpringDataAssetRepository (the actual Spring Data JPA
+  interface). It IS registered as a @Bean explicitly in BeanConfiguration via
+  `new JpaAssetRepository(springRepo)`, gated by @Profile({"demo","prod"}). The dev profile
+  uses InMemoryAssetRepository instead. Spring Data autoconfigures the
+  SpringDataAssetRepository interface; the adapter class itself is never component-scanned.
+• JpaUserRepository follows the same pattern: no @Repository, implements the UserRepository
+  port, wraps SpringDataUserRepository, registered as a @Bean in BeanConfiguration with
+  @Profile({"demo","prod"}). There is currently NO dev-profile UserRepository bean — nothing
+  in dev depends on it yet. Sprint 7.2 decides whether the login service needs a dev wiring
+  (InMemoryUserRepository) or whether Mockito mocks suffice for its tests.
+• BCryptPasswordEncoderAdapter implements the PasswordEncoder port and lives in adapter/output
+  (NOT in security/, despite the name). Registered as the `passwordEncoder` @Bean with NO
+  @Profile — available in every profile, since hashing is needed everywhere.
 • MapStruct adoption is deferred — manual mappers are intentional for now.
 • SpringEventPublisher uses @Component (auto-detected by Spring), not explicit wiring in
   BeanConfiguration. This is intentional — it's a simple infrastructure adapter with no
@@ -278,6 +297,32 @@ EXCEPTION HANDLING
 • AssetNotFoundException → 404 Not Found (thrown by findAsset and all orElseThrow calls).
 • updateAssetIpAddress checks existsByIpAddress but skips the check when newIp equals the
   asset's current IP (no-op case).
+
+AUTHENTICATION & USERS (added Sprint 7.1 — foundation only, no auth flow yet)
+• Spring Security is on the classpath ONLY to use BCryptPasswordEncoder as a hashing utility.
+  There is NO real authentication yet. Adding spring-boot-starter-security auto-configures
+  HTTP Basic on every endpoint, which would 401 everything and break all tests. The
+  placeholder SecurityConfig (anyRequest permitAll; csrf/httpBasic/formLogin disabled)
+  neutralizes that. It carries a TEMPORARY comment — Sprint 7.3 rewrites it entirely.
+• SecurityConfig must be `public` (not package-private) so @WebMvcTest slices can
+  @Import(SecurityConfig.class). The security auto-config is on the classpath in the slice,
+  but the permitAll config is not loaded unless imported — so without the import, controller
+  slice tests 401. Every @WebMvcTest class needs @Import(SecurityConfig.class).
+• password_hash does NOT use EncryptedStringConverter. BCrypt is a one-way hash; layering AES
+  on top is pointless and would break matches() (it would compare a hash against an
+  encrypted-then-decrypted value). AES is for Asset credentials, which must be decrypted to
+  open SSH sessions; BCrypt is for user passwords, which are only ever verified, never
+  recovered. Two different problems, two different tools.
+• PasswordEncoder is an Infratrack port (application/port/output), NOT Spring Security's
+  org.springframework.security.crypto.password.PasswordEncoder. The domain depends on our
+  port; the Spring class is an implementation detail hidden inside the adapter.
+• UserRepository.save() returns User (asymmetric with AssetRepository.save(), which is void).
+  Intentional — save-returns-entity is the safer default for entities that may gain state on
+  persist; Asset's void save predates the convention and is left as-is.
+• Schema: users table created by V2__add_users_table.sql. id VARCHAR(36) (consistent with
+  assets), password_hash VARCHAR(72) (BCrypt is 60 chars; margin without waste), CHECK
+  constraint chk_user_role IN ('ADMIN','VIEWER'). Two demo users (admin/viewer) seeded by
+  V3__seed_default_users.sql with real BCrypt hashes. Demo credentials only.
 
 SCHEDULING
 • MetricsScheduler uses @Component (auto-detected). Reads infratrack.monitoring.interval-seconds
