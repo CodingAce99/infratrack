@@ -52,6 +52,11 @@ infratrack:
   demo:
     enabled: false
 
+  # JWT con clave segura desde variable de entorno
+  jwt:
+    secret: ${INFRATRACK_JWT_SECRET}
+    expiration-ms: 3600000
+
 # Logs minimalistas en producción
 logging:
   level:

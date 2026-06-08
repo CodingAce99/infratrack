@@ -1,9 +1,11 @@
 package com.infratrack.infrastructure.config;
 
+import com.infratrack.application.port.input.AuthenticateUserUseCase;
 import com.infratrack.application.port.input.ManageAssetUseCase;
 import com.infratrack.application.port.input.MonitorAssetUseCase;
 import com.infratrack.application.port.output.*;
 import com.infratrack.application.service.AssetService;
+import com.infratrack.application.service.AuthenticationService;
 import com.infratrack.application.service.MonitoringService;
 import com.infratrack.infrastructure.adapter.output.*;
 import com.infratrack.infrastructure.persistence.SpringDataAssetRepository;
@@ -85,6 +87,23 @@ public class BeanConfiguration {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoderAdapter();
+    }
+
+    @Bean
+    @Profile({"demo", "prod"})
+    public TokenGenerator jjwtTokenGenerator(
+            @Value("${infratrack.jwt.secret}") String secret,
+            @Value("${infratrack.jwt.expiration-ms}") long expirationMs) {
+        return new JjwtTokenGenerator(secret, expirationMs);
+    }
+
+    @Bean
+    @Profile({"demo", "prod"})
+    public AuthenticateUserUseCase authenticateUserUseCase(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            TokenGenerator tokenGenerator) {
+        return new AuthenticationService(userRepository, passwordEncoder, tokenGenerator);
     }
 }
 

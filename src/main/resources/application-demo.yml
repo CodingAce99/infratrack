@@ -32,7 +32,6 @@ infratrack:
   security:
     encryption:
       enabled: true
-      # Esta clave debe ser de 32 caracteres en Base64
   
   # SSH en modo Mock pero con datos realistas
   ssh:
@@ -45,6 +44,11 @@ infratrack:
   demo:
     enabled: true
     generate-sample-data: true
+
+  # JWT clave para demo, en producción debe ser segura y no hardcodeada
+  jwt:
+    secret: ${INFRATRACK_JWT_SECRET:demo-secret-key-not-for-production-use}
+    expiration-ms: 3600000
 
 logging:
   level:

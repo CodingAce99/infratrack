@@ -1,5 +1,6 @@
 package com.infratrack.infrastructure.adapter.input;
 
+import com.infratrack.domain.exception.InvalidCredentialsException;
 import com.infratrack.domain.model.AssetNotFoundException;
 import com.infratrack.domain.model.DuplicateIpAddressException;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleAssetNotFound(
             AssetNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidCredentialsException(
+            InvalidCredentialsException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of("error", ex.getMessage()));
     }
 }

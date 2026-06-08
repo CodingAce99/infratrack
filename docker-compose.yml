@@ -44,6 +44,7 @@ services:
       SPRING_DATASOURCE_USERNAME: infratrack_user
       SPRING_DATASOURCE_PASSWORD: infratrack_pass
       INFRATRACK_ENCRYPTION_KEY: ${INFRATRACK_ENCRYPTION_KEY:-yt1+CDm1+7KdsybbxWrFcunLl8hnMTROPrEdi2daEuc=}
+      INFRATRACK_JWT_SECRET: ${INFRATRACK_JWT_SECRET:-demo-secret-key-not-for-production-use}
       INFRATRACK_SSH_PORT: 22
     depends_on:
       postgres:

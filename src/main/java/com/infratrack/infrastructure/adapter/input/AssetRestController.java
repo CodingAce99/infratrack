@@ -19,13 +19,13 @@ public class AssetRestController {
 
     private final ManageAssetUseCase useCase;
 
-    // contructor con inyección
+    // Constructor injection
 
     public AssetRestController(ManageAssetUseCase useCase) {
         this.useCase = Objects.requireNonNull(useCase, "ManageAssetUseCase cannot be null");
     }
 
-    // endpoints REST para crear, obtener, actualizar y eliminar activos
+    // REST endpoints for CRUD operations
     @GetMapping
     public ResponseEntity<List<AssetResponse>> findAllAssets() {
         List<Asset> assets = useCase.findAllAssets();

@@ -28,6 +28,7 @@
         <!-- External library versions (not managed by Spring Boot) -->
         <sshj.version>0.40.0</sshj.version>
         <lombok.version>1.18.36</lombok.version>
+        <jjwt.version>0.13.0</jjwt.version>
     </properties>
 
     <dependencies>
@@ -119,6 +120,31 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- jjwt — JWT generation and validation -->
+        <!-- jjwt-api: compile-time API (the only artifact needed to compile) -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+        <!-- jjwt-impl: runtime implementation — MUST be present or signWith() throws -->
+        <!-- at runtime with "No implementation found". The build stays green, -->
+        <!-- the app crashes. This is the classic missing-runtime-dep failure mode. -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- jjwt-jackson: JSON serialization of claims via Jackson -->
+        <!-- also runtime-only — same failure mode if missing -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
         </dependency>
 
     </dependencies>
