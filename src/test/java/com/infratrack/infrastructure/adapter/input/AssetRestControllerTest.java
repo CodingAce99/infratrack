@@ -43,8 +43,7 @@ public class AssetRestControllerTest {
     private Asset testAsset;
 
 
-    @BeforeEach
-        // runs before every test to start the reference asset
+    @BeforeEach // runs before every test to start the reference asset
     void setUp() {
         testAsset = Asset.reconstitute(
                 AssetId.of("123e4567-e89b-12d3-a456-426614174000"),

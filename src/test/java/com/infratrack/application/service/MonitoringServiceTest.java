@@ -22,7 +22,7 @@ import static org.mockito.Mockito.*;
 
 @DisplayName("MonitoringService — application service")
 @ExtendWith(MockitoExtension.class)
-public class MonitoringServiceTest {
+class MonitoringServiceTest {
 
     @Mock
     private AssetRepository assetRepository;
