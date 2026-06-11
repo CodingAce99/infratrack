@@ -22,7 +22,7 @@ cd frontend && npm run dev    # http://localhost:3000
 
 # Build & test
 ./mvnw clean package          # Build JAR
-./mvnw test                   # Run all tests (112 passing)
+./mvnw test                   # Run all tests (123 passing)
 ./mvnw test -Dtest=<Class>    # Run a specific test class
 ```
 
@@ -37,20 +37,21 @@ com.infratrack/
 │   └── event/             → Domain events as plain Java records.
 │
 ├── application/           → Use cases and port interfaces. Framework-agnostic.
-│   ├── port/input/          ManageAssetUseCase, MonitorAssetUseCase
+│   ├── port/input/          ManageAssetUseCase, MonitorAssetUseCase, AuthenticateUserUseCase
 │   ├── port/output/         AssetRepository, DomainEventPublisher,
 │   │                        MetricsCollector, MetricSnapshotRepository,
-│   │                        UserRepository, PasswordEncoder
-│   └── service/             AssetService, MonitoringService
+│   │                        UserRepository, PasswordEncoder, TokenGenerator
+│   └── service/             AssetService, MonitoringService, AuthenticationService
 │
 └── infrastructure/        → Spring Boot, JPA, REST, SSH — all framework code lives here.
-    ├── adapter/input/       AssetRestController, MetricsRestController, MetricsScheduler
+    ├── adapter/input/       AssetRestController, MetricsRestController, MetricsScheduler,
+    │                        AuthRestController
     ├── adapter/input/dto/   Request/Response DTOs + mappers (HTTP ↔ Domain)
     ├── adapter/output/      JpaAssetRepository, InMemoryAssetRepository,
     │                        SpringEventPublisher, MockMetricsCollector,
     │                        SshMetricsCollector, JpaMetricSnapshotRepository,
     │                        InMemoryMetricSnapshotRepository, JpaUserRepository,
-    │                        BCryptPasswordEncoderAdapter
+    │                        BCryptPasswordEncoderAdapter, JjwtTokenGenerator
     ├── config/              BeanConfiguration, SchedulingConfiguration
     │                        SecurityConfig
     ├── persistence/         JPA entities, mappers (Domain ↔ JPA)
@@ -163,6 +164,7 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 |-------|-----------|
 | At rest (DB) | AES-256-GCM via JPA `AttributeConverter` |
 | User passwords | BCrypt one-way hash via the `PasswordEncoder` port — never reversible, never AES-encrypted |
+| Authentication | Stateless JWT (HS256), issued at login, 1h expiry, no server-side session |
 | In transit | HTTPS / TLS 1.3 |
 | In responses | `AssetResponse` structurally excludes credentials |
 | In logs | `Credentials.toString()` omits password by design |
@@ -170,7 +172,7 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 
 ## Testing Strategy
 
-112 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
+123 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
 
 | Layer | Approach | Spring context? |
 |-------|----------|-----------------|
@@ -183,7 +185,9 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 ## Environment Variables
 
 **Demo / Prod:**
+**Demo / Prod:**
 - `INFRATRACK_ENCRYPTION_KEY` — AES key, 32 bytes, Base64-encoded
+- `INFRATRACK_JWT_SECRET` — HMAC-SHA256 signing key, >= 32 bytes. Demo has a default; prod has none (fail-fast on missing key).
 
 **Prod only:**
 - `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD`
@@ -203,8 +207,8 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 | 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build, full ecosystem containerized |
 | 6.5 — Flyway | ✅ Done | Schema versioning via Flyway 11; `schema.sql` replaced by `V1__initial_schema.sql`; `ddl-auto: validate` everywhere |
 | 7.1 — User persistence | ✅ Done | User domain (Username, EncodedPassword, UserRole), JPA + BCrypt, seed admin/viewer via Flyway V2/V3 |
-| 7.2 — JWT + login | ⏳ Next | Login use case + `POST /api/v1/auth/login` returning a signed JWT |
-| 7.3 — Security filter + roles | Pending | Real `SecurityFilterChain`, role enforcement (ADMIN write / VIEWER read) |
+| 7.2 — JWT + login | ✅ Done | Login use case + `POST /api/v1/auth/login` returning a signed JWT (HS256, 1h) |
+| 7.3 — Security filter + roles | ⏳ Next | Real `SecurityFilterChain`, JWT validation filter, role enforcement (ADMIN write / VIEWER read) |
 | 7.4 — Login UI + token storage | Pending | Frontend login page, token in React context |
 | 7.5 — Protected routes + 401/403 | Pending | End-to-end auth flow from the browser |
 | 8 — Observability | Pending | Spring Actuator, Micrometer metrics, structured logging with MDC |
@@ -323,6 +327,32 @@ AUTHENTICATION & USERS (added Sprint 7.1 — foundation only, no auth flow yet)
   assets), password_hash VARCHAR(72) (BCrypt is 60 chars; margin without waste), CHECK
   constraint chk_user_role IN ('ADMIN','VIEWER'). Two demo users (admin/viewer) seeded by
   V3__seed_default_users.sql with real BCrypt hashes. Demo credentials only.
+
+JWT LOGIN (Sprint 7.2)
+• jjwt 0.13 needs THREE artifacts: jjwt-api (compile), jjwt-impl (runtime), jjwt-jackson
+  (runtime). Missing a runtime artifact compiles cleanly and then crashes on the FIRST login
+  request (not at startup) with "no implementation found". Confusing because the build is green.
+• Use the modern API only: Jwts.builder().subject().claim().issuedAt().expiration().signWith(key)
+  .compact(); and Jwts.parser().verifyWith(key).build().parseSignedClaims(). The old setX /
+  signWith(SignatureAlgorithm, secret) / parseClaimsJws API is gone in 0.12+.
+• JjwtTokenGenerator builds the SecretKey ONCE in its constructor via Keys.hmacShaKeyFor().
+  Fail-fast: a weak key (< 32 bytes for HS256) throws WeakKeyException at STARTUP, not on first
+  login. INFRATRACK_JWT_SECRET must be >= 32 bytes.
+• TokenGenerator is an output port; jjwt never appears in application/ or domain/. Same isolation
+  pattern as PasswordEncoder.
+• Uniform-failure login: AuthenticationService throws the SAME InvalidCredentialsException for
+  user-not-found, wrong-password, AND malformed username. The malformed case is caught
+  (InvalidUsernameException) inside login() and rethrown before the repository is queried, so the
+  username format rules are never leaked. GlobalExceptionHandler maps it to 401.
+• type:"Bearer" is assigned in AuthDtoMapper (REST layer), NOT in AuthenticationResult. The
+  application result knows nothing about HTTP; "Bearer" is an Authorization-header protocol const.
+• The whole auth stack (AuthenticationService, JjwtTokenGenerator, AuthRestController) is
+  @Profile({"demo","prod"}) because it depends on UserRepository, which has no dev bean. No auth
+  in dev, by design. The dev context still starts cleanly (none of these beans are created).
+• @WebMvcTest GOTCHA: a controller annotated @Profile returns 404 for every request in a slice,
+  because the slice runs under the default profile and Spring never registers the controller. Fix:
+  @ActiveProfiles("demo") on the test class (plus @Import(SecurityConfig.class) as before). A 404
+  in a @WebMvcTest almost always means the controller is absent from the slice context.
 
 SCHEDULING
 • MetricsScheduler uses @Component (auto-detected). Reads infratrack.monitoring.interval-seconds
