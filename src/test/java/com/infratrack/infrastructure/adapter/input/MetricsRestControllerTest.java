@@ -22,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("MetricsRestController")
 @WebMvcTest(MetricsRestController.class)
 @Import(SecurityConfig.class)
+@org.springframework.test.context.ActiveProfiles("dev")
 public class MetricsRestControllerTest {
 
     @Autowired

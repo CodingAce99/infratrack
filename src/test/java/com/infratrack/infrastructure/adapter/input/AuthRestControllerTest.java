@@ -2,6 +2,7 @@ package com.infratrack.infrastructure.adapter.input;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.infratrack.application.port.input.AuthenticateUserUseCase;
+import com.infratrack.application.port.output.TokenValidator;
 import com.infratrack.application.port.input.AuthenticationResult;
 import com.infratrack.domain.exception.InvalidCredentialsException;
 import com.infratrack.domain.model.*;
@@ -39,6 +40,9 @@ class AuthRestControllerTest {
 
     @MockitoBean
     private AuthenticateUserUseCase useCase;
+
+    @MockitoBean
+    private TokenValidator tokenValidator;
 
     @Nested
     @DisplayName("POST /api/v1/auth/login")

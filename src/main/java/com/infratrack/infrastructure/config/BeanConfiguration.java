@@ -99,6 +99,13 @@ public class BeanConfiguration {
 
     @Bean
     @Profile({"demo", "prod"})
+    public TokenValidator jjwtTokenValidator(
+            @Value("${infratrack.jwt.secret}") String secret) {
+        return new JjwtTokenValidator(secret);
+    }
+
+    @Bean
+    @Profile({"demo", "prod"})
     public AuthenticateUserUseCase authenticateUserUseCase(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,

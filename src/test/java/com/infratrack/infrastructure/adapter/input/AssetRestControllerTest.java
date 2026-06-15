@@ -29,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("AssetRestController")
 @WebMvcTest(AssetRestController.class)
 @Import(SecurityConfig.class)
+@org.springframework.test.context.ActiveProfiles("dev")
 public class AssetRestControllerTest {
 
     @Autowired
