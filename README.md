@@ -21,7 +21,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 - **Versioned schema** — Database changes managed by Flyway migrations. Each schema change is a numbered, immutable SQL file applied incrementally, recorded in `flyway_schema_history`.
 - **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + real SSH to Alpine containers), `prod` (real infrastructure).
 - **Virtual Threads** — Java 21 Virtual Threads for non-blocking parallel SSH collection with per-asset fault isolation.
-- **123 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
+- **146 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
 
 ---
 
@@ -256,6 +256,13 @@ Response:
 
 ### Asset endpoints
 
+> **Authentication:** all `/api/v1/assets/**` endpoints require a JWT.
+> Obtain one via `POST /api/v1/auth/login` (public), then send it as
+> `Authorization: Bearer <token>` on subsequent requests.
+> Reads (`GET`) are available to any authenticated user; writes (`POST`/`PUT`/`DELETE`)
+> require the `ADMIN` role. Requests without a valid token return `401`; an authenticated
+> user lacking the required role returns `403`.
+
 All endpoints under `/api/v1/assets`:
 
 | Method | Endpoint | Description |
@@ -322,6 +329,7 @@ Response — note that `password` is never returned:
 | Credentials in API responses | `AssetResponse` structurally has no password field |
 | Credentials in logs | `Credentials.toString()` omits sensitive data |
 | Key management | Environment variable (`INFRATRACK_ENCRYPTION_KEY`) |
+| Authorization | Role-based: VIEWER reads, ADMIN reads and writes. Enforced by a JWT validation filter + URL rules in the SecurityFilterChain |
 
 The encryption converter is transparent to the domain — it operates at the JPA layer, so business logic works with plain `Credentials` objects while persistence handles encryption automatically.
 
@@ -329,7 +337,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 
 ## Testing
 
-**123 tests** passing across four layers:
+**146 tests** passing across four layers:
 
 | Layer | Strategy | Spring context |
 |-------|----------|----------------|
@@ -380,7 +388,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | 6.5 — Flyway | ✅ Done | Versioned schema migrations replacing static schema.sql |
 | 7.1 — User persistence | ✅ Done | User domain (Username, EncodedPassword, UserRole), JPA + BCrypt, seed admin/viewer via Flyway V2/V3 |
 | 7.2 — JWT + login | ✅ Done | Login endpoint `POST /api/v1/auth/login` returning a signed JWT (HS256, 1h) |
-| 7.3 — Security filter + roles | ⏳ In progress | Real `SecurityFilterChain`, JWT validation filter, role enforcement (ADMIN write / VIEWER read) |
+| 7.3 — Security filter + roles | ✅ Done | Real `SecurityFilterChain`, JWT validation filter, role enforcement (ADMIN write / VIEWER read) |
 | 7.4 — Login UI + token storage | Pending | Frontend login page, token in React context |
 | 7.5 — Protected routes + 401/403 | Pending | End-to-end auth flow from the browser |
 | 8 — Observability | Pending | Spring Actuator, Micrometer metrics, structured logging with MDC |

@@ -22,7 +22,7 @@ cd frontend && npm run dev    # http://localhost:3000
 
 # Build & test
 ./mvnw clean package          # Build JAR
-./mvnw test                   # Run all tests (123 passing)
+./mvnw test                   # Run all tests (146 passing)
 ./mvnw test -Dtest=<Class>    # Run a specific test class
 ```
 
@@ -40,7 +40,7 @@ com.infratrack/
 │   ├── port/input/          ManageAssetUseCase, MonitorAssetUseCase, AuthenticateUserUseCase
 │   ├── port/output/         AssetRepository, DomainEventPublisher,
 │   │                        MetricsCollector, MetricSnapshotRepository,
-│   │                        UserRepository, PasswordEncoder, TokenGenerator
+│   │                        UserRepository, PasswordEncoder, TokenGenerator, TokenValidator (+ TokenClaims record)
 │   └── service/             AssetService, MonitoringService, AuthenticationService
 │
 └── infrastructure/        → Spring Boot, JPA, REST, SSH — all framework code lives here.
@@ -51,11 +51,14 @@ com.infratrack/
     │                        SpringEventPublisher, MockMetricsCollector,
     │                        SshMetricsCollector, JpaMetricSnapshotRepository,
     │                        InMemoryMetricSnapshotRepository, JpaUserRepository,
-    │                        BCryptPasswordEncoderAdapter, JjwtTokenGenerator
+    │                        BCryptPasswordEncoderAdapter, JjwtTokenGenerator, JjwtTokenValidator
     ├── config/              BeanConfiguration, SchedulingConfiguration
     │                        SecurityConfig
     ├── persistence/         JPA entities, mappers (Domain ↔ JPA)
     └── security/            EncryptedStringConverter (AES-256-GCM)
+                             JwtAuthenticationFilter (OncePerRequestFilter, validates Bearer, populates SecurityContext)
+                             RestAuthenticationEntryPoint (401 JSON)
+                             RestAccessDeniedHandler (403 JSON)
 ```
 
 Schema is managed by Flyway migrations under `src/main/resources/db/migration/` (V1__initial_schema.sql is the baseline). See the Database section in internal notes for operational details.
@@ -165,6 +168,7 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 | At rest (DB) | AES-256-GCM via JPA `AttributeConverter` |
 | User passwords | BCrypt one-way hash via the `PasswordEncoder` port — never reversible, never AES-encrypted |
 | Authentication | Stateless JWT (HS256), issued at login, 1h expiry, no server-side session |
+| Authorization | URL-based role rules in the SecurityFilterChain: reads (`GET /api/v1/assets/**`) allowed to any authenticated role, writes (POST/PUT/DELETE) require ADMIN, login is public |
 | In transit | HTTPS / TLS 1.3 |
 | In responses | `AssetResponse` structurally excludes credentials |
 | In logs | `Credentials.toString()` omits password by design |
@@ -172,7 +176,7 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 
 ## Testing Strategy
 
-123 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
+146 tests passing · JUnit 5 + Mockito · `@Nested` classes with `@DisplayName`
 
 | Layer | Approach | Spring context? |
 |-------|----------|-----------------|
@@ -208,8 +212,8 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 | 6.5 — Flyway | ✅ Done | Schema versioning via Flyway 11; `schema.sql` replaced by `V1__initial_schema.sql`; `ddl-auto: validate` everywhere |
 | 7.1 — User persistence | ✅ Done | User domain (Username, EncodedPassword, UserRole), JPA + BCrypt, seed admin/viewer via Flyway V2/V3 |
 | 7.2 — JWT + login | ✅ Done | Login use case + `POST /api/v1/auth/login` returning a signed JWT (HS256, 1h) |
-| 7.3 — Security filter + roles | ⏳ Next | Real `SecurityFilterChain`, JWT validation filter, role enforcement (ADMIN write / VIEWER read) |
-| 7.4 — Login UI + token storage | Pending | Frontend login page, token in React context |
+| 7.3 — Security filter + roles | ✅ Done | Real `SecurityFilterChain`, JWT validation filter, role enforcement (ADMIN write / VIEWER read) |
+| 7.4 — Login UI + token storage | ⏳ Next | Frontend login page, token in React context |
 | 7.5 — Protected routes + 401/403 | Pending | End-to-end auth flow from the browser |
 | 8 — Observability | Pending | Spring Actuator, Micrometer metrics, structured logging with MDC |
 | 9 — Event Streaming | Pending | Apache Kafka pipeline for metrics + alerts (KRaft mode) |
@@ -353,6 +357,39 @@ JWT LOGIN (Sprint 7.2)
   because the slice runs under the default profile and Spring never registers the controller. Fix:
   @ActiveProfiles("demo") on the test class (plus @Import(SecurityConfig.class) as before). A 404
   in a @WebMvcTest almost always means the controller is absent from the slice context.
+
+SECURITY FILTER + AUTHORIZATION (Sprint 7.3)
+• Two SecurityFilterChain beans, profile-split like repositories/collectors:
+  @Profile("dev") permits everything (dev has no TokenValidator/filter beans, by design);
+  @Profile({"demo","prod"}) is the real secured chain. SecurityConfig stays public so
+  @WebMvcTest slices can @Import it.
+• TokenValidator is a NEW output port (mirror of TokenGenerator); JjwtTokenValidator is its
+  adapter. The filter depends on the port, never on jjwt directly. validate() throws
+  InvalidTokenException (domain.exception, mirrors InvalidCredentialsException) on
+  bad/expired/malformed tokens.
+• ROLE_ PREFIX GOTCHA: hasRole("ADMIN") checks for the authority ROLE_ADMIN. The JWT claim
+  stores "ADMIN" (no prefix). JwtAuthenticationFilter must build the authority as
+  new SimpleGrantedAuthority("ROLE_" + claims.role()). Get this wrong → every authenticated
+  request 403s even with a valid ADMIN token.
+• Filter-level rejections (401/403) NEVER reach @RestControllerAdvice — they happen before the
+  request hits the controller. That is why RestAuthenticationEntryPoint (401) and
+  RestAccessDeniedHandler (403) exist; they write {"error":"..."} directly to match
+  GlobalExceptionHandler's body shape (Map.of("error", msg)).
+• DOUBLE-REGISTRATION GOTCHA: Spring Boot auto-registers any Filter bean as a servlet filter,
+  so a JWT filter added via addFilterBefore would run twice per request. Fix: a
+  FilterRegistrationBean<JwtAuthenticationFilter> with setEnabled(false) keeps the bean available
+  to the security chain while disabling the duplicate servlet registration.
+• requestMatchers ORDER matters (first match wins): login permitAll FIRST, then GET assets/**
+  for any role, then assets/** (non-GET) ADMIN only, then anyRequest authenticated. Inverting the
+  GET rule and the write rule would let a VIEWER write.
+• Uniform rejection: missing token and invalid/expired token both yield the same generic 401
+  (no leak of why), same spirit as 7.2's uniform login failure. The filter does not short-circuit
+  on a bad token; it just doesn't authenticate, and the authorization layer produces the 401.
+• @WebMvcTest IMPACT: controller slices that @Import(SecurityConfig.class) now need a matching
+  profile, because both chains are profile-gated. AssetRestControllerTest and
+  MetricsRestControllerTest use @ActiveProfiles("dev") (permitAll chain, no TokenValidator needed).
+  AuthRestControllerTest stays @ActiveProfiles("demo") and adds @MockitoBean TokenValidator so the
+  secured chain's filter dependency is satisfied; login stays permitAll so its assertions hold.
 
 SCHEDULING
 • MetricsScheduler uses @Component (auto-detected). Reads infratrack.monitoring.interval-seconds
