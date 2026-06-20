@@ -131,3 +131,8 @@ spring-shell.log
 node_modules/
 npm-debug.log
 yarn-error.log
+
+# ───────────────────────────────────────────────────────
+# Gentle AI local cache
+# ───────────────────────────────────────────────────────
+.atl/

@@ -1,0 +1,51 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Tech stack: Java 21, Spring Boot 3.5.0, Maven, PostgreSQL/H2, Flyway 11, Next.js 15.5 + TypeScript + Tailwind CSS v4
+  Architecture: Hexagonal (Ports & Adapters) — strict layer boundaries, domain has zero framework dependencies
+  Testing: JUnit 5 + Mockito, @WebMvcTest slices, Testcontainers. 146 tests. No frontend tests yet.
+  Style: Factory methods over constructors, self-validating VOs, DTO mappers in adapter layer, explicit wiring in BeanConfiguration
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    - Follow existing code patterns
+    tdd: true
+    test_command: "./mvnw test -Dspring.profiles.active=dev"
+  verify:
+    test_command: "./mvnw test -Dspring.profiles.active=dev"
+    build_command: "./mvnw clean verify -Dspring.profiles.active=dev"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
+
+testing:
+  strict_tdd: true
+  test_runner:
+    command: "./mvnw test -Dspring.profiles.active=dev"
+    framework: JUnit 5 (Jupiter) + Mockito
+  layers:
+    unit: true
+    integration: true
+    e2e: false
+  coverage:
+    available: false
+    command: ""
+  quality:
+    linter: Java compiler (no Checkstyle/PMD configured)
+    type_checker: Java 21 (built-in)
+    formatter: Not configured
+    frontend_linter: ESLint 9 with eslint-config-next
+    frontend_type_checker: TypeScript 5
+    frontend_formatter: Not configured

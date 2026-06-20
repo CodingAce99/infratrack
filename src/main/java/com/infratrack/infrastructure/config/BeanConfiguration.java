@@ -19,6 +19,7 @@ import com.infratrack.application.port.output.PasswordEncoder;
 import com.infratrack.application.port.output.UserRepository;
 import com.infratrack.infrastructure.adapter.output.BCryptPasswordEncoderAdapter;
 import com.infratrack.infrastructure.adapter.output.JpaUserRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 
 @Configuration
 public class BeanConfiguration {
@@ -72,8 +73,9 @@ public class BeanConfiguration {
     @Bean
     @Profile({"demo", "prod"})
     public MetricsCollector sshMetricsCollector(
-            @Value("${infratrack.ssh.port:22}") int sshPort) {
-        return new SshMetricsCollector(sshPort);
+            @Value("${infratrack.ssh.port:22}") int sshPort,
+            MeterRegistry meterRegistry) {
+        return new SshMetricsCollector(sshPort, meterRegistry);
     }
 
     // --- User beans ---

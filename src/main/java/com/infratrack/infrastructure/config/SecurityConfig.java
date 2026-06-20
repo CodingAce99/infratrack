@@ -3,6 +3,7 @@ package com.infratrack.infrastructure.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.infratrack.application.port.output.TokenValidator;
 import com.infratrack.infrastructure.security.JwtAuthenticationFilter;
+import com.infratrack.infrastructure.security.MdcCorrelationFilter;
 import com.infratrack.infrastructure.security.RestAccessDeniedHandler;
 import com.infratrack.infrastructure.security.RestAuthenticationEntryPoint;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -68,6 +69,20 @@ public class SecurityConfig {
         return reg;
     }
 
+    // MdcCorrelationFilter: registered as a servlet filter (NOT in the
+    // SecurityFilterChain) so it applies to every request, including
+    // actuator endpoints that bypass the security chain entirely.
+    // Order -100 ensures it runs before Spring Security filters,
+    // putting the correlation id in MDC before any auth or controller work.
+    // Available in ALL profiles — correlation ids are useful during development too.
+    @Bean
+    FilterRegistrationBean<MdcCorrelationFilter> mdcCorrelationFilterRegistration() {
+        FilterRegistrationBean<MdcCorrelationFilter> reg =
+                new FilterRegistrationBean<>(new MdcCorrelationFilter());
+        reg.setOrder(-100);
+        return reg;
+    }
+
     // --- Secured chain (demo/prod) ---
 
     @Bean
@@ -94,13 +109,18 @@ public class SecurityConfig {
 
                 // Authorization rules — first match wins, so ORDER MATTERS:
                 // 1. Login is public (no token required to obtain a token).
-                // 2. GET on assets/** is allowed to any authenticated role.
-                // 3. All other verbs on assets/** (POST/PUT/DELETE) require ADMIN.
+                // 2. Actuator endpoints are public — Prometheus scrapes and Docker
+                //    healthchecks are unauthenticated machine requests. Note: in a real
+                //    deployment these would sit on a separate management port or network.
+                // 3. GET on assets/** is allowed to any authenticated role.
+                // 4. All other verbs on assets/** (POST/PUT/DELETE) require ADMIN.
                 //    hasRole("ADMIN") checks for the authority ROLE_ADMIN — the filter
                 //    sets "ROLE_" + claims.role(), so "ADMIN" → "ROLE_ADMIN". Consistent.
-                // 4. Anything else requires authentication (future endpoints stay protected).
+                //    Rules 3 and 4 are an intentional pair — do not reorder them.
+                // 5. Anything else requires authentication (future endpoints stay protected).
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/assets/**").hasAnyRole("ADMIN", "VIEWER")
                         .requestMatchers("/api/v1/assets/**").hasRole("ADMIN")
                         .anyRequest().authenticated()

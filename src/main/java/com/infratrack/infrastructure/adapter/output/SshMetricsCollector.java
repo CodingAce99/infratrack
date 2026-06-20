@@ -4,6 +4,7 @@ import com.infratrack.application.port.output.MetricsCollector;
 import com.infratrack.domain.model.Asset;
 import com.infratrack.domain.model.IpAddress;
 import com.infratrack.domain.model.MetricSnapshot;
+import io.micrometer.core.instrument.MeterRegistry;
 import net.schmizz.sshj.SSHClient;
 import net.schmizz.sshj.connection.channel.direct.Session;
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
@@ -16,13 +17,22 @@ import java.util.regex.Pattern;
 public class SshMetricsCollector implements MetricsCollector {
 
     private final int sshPort;
+    private final MeterRegistry meterRegistry;
 
-    public SshMetricsCollector(int sshPort) {
+    public SshMetricsCollector(int sshPort, MeterRegistry meterRegistry) {
         this.sshPort = sshPort;
+        this.meterRegistry = meterRegistry;
     }
 
-    @Override
-    public MetricSnapshot collect(Asset asset) {
+    /**
+     * Test seam: performs the full SSH collection (connect, authenticate, execute
+     * commands, parse, disconnect) for a single asset. Override in test subclasses
+     * to simulate successful collection without a real SSH server.
+     * <p>
+     * The {@link #collect(Asset)} method wraps this with counter instrumentation
+     * — test subclasses only need to return a synthetic {@link MetricSnapshot}.
+     */
+    protected MetricSnapshot doCollect(Asset asset) throws IOException {
         IpAddress ip = asset.getIpAddress();
         SSHClient ssh = new SSHClient();
         try {
@@ -37,7 +47,7 @@ public class SshMetricsCollector implements MetricsCollector {
             try (Session session = ssh.startSession()) {
                 Session.Command cmd = session.exec("top -bn1 | grep '%Cpu'");
                 cpuOutput = new String(cmd.getInputStream().readAllBytes());
-                cmd.join(5, TimeUnit.SECONDS); // wait for remote process to finish
+                cmd.join(5, TimeUnit.SECONDS);
             }
 
             String memOutput;
@@ -60,16 +70,33 @@ public class SshMetricsCollector implements MetricsCollector {
                     parseMemoryUsage(memOutput),
                     parseDiskUsage(diskOutput)
             );
-        } catch (IOException e) {
-            throw new RuntimeException(
-                    "SSH collection failed for asset " + asset.getId().getValue(), e);
         } finally {
             try {
                 ssh.disconnect();
             } catch (IOException e) {
                 // /* ignored */
             }
+        }
+    }
 
+    @Override
+    public MetricSnapshot collect(Asset asset) {
+        try {
+            MetricSnapshot snapshot = doCollect(asset);
+
+            meterRegistry.counter("infratrack.ssh.collection",
+                    "outcome", "success").increment();
+
+            return snapshot;
+        } catch (IOException e) {
+            meterRegistry.counter("infratrack.ssh.collection",
+                    "outcome", "failure").increment();
+            throw new RuntimeException(
+                    "SSH collection failed for asset " + asset.getId().getValue(), e);
+        } catch (RuntimeException e) {
+            meterRegistry.counter("infratrack.ssh.collection",
+                    "outcome", "failure").increment();
+            throw e;
         }
     }
 

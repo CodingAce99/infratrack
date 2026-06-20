@@ -147,6 +147,23 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Spring Boot Actuator — exposes /actuator/health, /actuator/info,
+             /actuator/prometheus. Auto-configures a CompositeMeterRegistry bean
+             that every custom metric writes to. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Micrometer Prometheus registry.
+             Under the hood: adds PrometheusMeterRegistry to the CompositeMeterRegistry;
+             Actuator scrapes it and serves /actuator/prometheus in Prometheus text format.
+             Default scope ensures auto-configuration picks it up in @SpringBootTest slices. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>

@@ -37,6 +37,27 @@ logging:
     root: INFO
     com.infratrack: DEBUG
 
+management:
+  endpoints:
+    web:
+      exposure:
+        # Only expose what we need. Default is only "health"; "prometheus" is
+        # added for scraping, "info" for build metadata. Everything else (env,
+        # beans, heapdump) stays off — no accidental secret leak via /actuator/env.
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        # Enables /actuator/health/liveness and /actuator/health/readiness.
+        # The Docker healthcheck uses /actuator/health (parent) which still works.
+        enabled: true
+      show-details: always
+  metrics:
+    tags:
+      # Adds application="infratrack" to every metric emitted by this instance.
+      # When multiple services report to one Prometheus, this tag lets you filter.
+      application: ${spring.application.name}
+
 # Custom application properties
 infratrack:
   encryption:
