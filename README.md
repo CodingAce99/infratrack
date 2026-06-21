@@ -21,7 +21,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 - **Versioned schema** — Database changes managed by Flyway migrations. Each schema change is a numbered, immutable SQL file applied incrementally, recorded in `flyway_schema_history`.
 - **Three execution profiles** — `dev` (H2, instant feedback), `demo` (PostgreSQL + real SSH to Alpine containers), `prod` (real infrastructure).
 - **Virtual Threads** — Java 21 Virtual Threads for non-blocking parallel SSH collection with per-asset fault isolation.
-- **146 tests** across domain, service, and REST layers — including dedicated security tests that verify credentials never leak.
+- **173 tests** across domain, service, REST, and observability layers — including dedicated security tests that verify credentials never leak.
 
 ---
 
@@ -39,6 +39,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 | CI/CD | GitHub Actions |
 | Containerization | Docker, Docker Compose, multi-stage builds |
 | Testing | JUnit 5, Mockito |
+| Observability | Spring Boot Actuator, Micrometer + Prometheus, structured logging with MDC |
 
 ---
 
@@ -250,8 +251,9 @@ Response:
 }
 ```
 
-> Demo users (`admin` / `viewer`) are seeded automatically. The token is currently issued but
-> not yet enforced on other endpoints — validation and role-based access land in Phase 7.3.
+> Demo users (`admin` / `viewer`) are seeded automatically by Flyway. All `/api/v1/assets/**`
+> endpoints require the token — read access for any authenticated role, write access for ADMIN.
+> The login endpoint itself is public.
 
 
 ### Asset endpoints
@@ -281,6 +283,21 @@ All endpoints under `/api/v1/assets`:
 |--------|----------|-------------|
 | `GET` | `/{id}/metrics` | Latest snapshot (404 if none) |
 | `GET` | `/{id}/metrics/history` | Last N snapshots (default 20, `?limit=N`) |
+
+### Observability endpoints
+
+> **These endpoints are public** — they are served outside the JWT security chain so that
+> Prometheus scrapers, Docker healthchecks, and load-balancer probes can reach them without
+> authentication. Only `health`, `info`, and `prometheus` are exposed; all other actuator
+> endpoints (env, configprops, beans, heapdump, etc.) return 404.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/actuator/health` | Aggregated health status (used by Docker healthcheck) |
+| `GET` | `/actuator/health/liveness` | Liveness probe — app is running but not necessarily ready |
+| `GET` | `/actuator/health/readiness` | Readiness probe — app is ready to serve traffic |
+| `GET` | `/actuator/info` | Build metadata (`/actuator/info` currently returns empty JSON) |
+| `GET` | `/actuator/prometheus` | Metrics in Prometheus text exposition format |
 
 ### Example: Create an asset
 
@@ -330,6 +347,7 @@ Response — note that `password` is never returned:
 | Credentials in logs | `Credentials.toString()` omits sensitive data |
 | Key management | Environment variable (`INFRATRACK_ENCRYPTION_KEY`) |
 | Authorization | Role-based: VIEWER reads, ADMIN reads and writes. Enforced by a JWT validation filter + URL rules in the SecurityFilterChain |
+| Actuator endpoints | `/actuator/**` is public — excluded from JWT enforcement. Only `health`, `info`, and `prometheus` are exposed |
 
 The encryption converter is transparent to the domain — it operates at the JPA layer, so business logic works with plain `Credentials` objects while persistence handles encryption automatically.
 
@@ -337,7 +355,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 
 ## Testing
 
-**146 tests** passing across four layers:
+**173 tests** passing across five layers:
 
 | Layer | Strategy | Spring context |
 |-------|----------|----------------|
@@ -345,6 +363,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | Application | Mockito-based service tests with mocked ports | None |
 | REST | `@WebMvcTest` with mocked use cases | Slice |
 | Security | Verify passwords never appear in responses or `toString()` | Varies |
+| Observability | Actuator health/metrics endpoints, MDC logging, Micrometer | Slice |
 
 ```bash
 ./mvnw test                          # All tests
@@ -391,7 +410,7 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | 7.3 — Security filter + roles | ✅ Done | Real `SecurityFilterChain`, JWT validation filter, role enforcement (ADMIN write / VIEWER read) |
 | 7.4 — Login UI + token storage | Pending | Frontend login page, token in React context |
 | 7.5 — Protected routes + 401/403 | Pending | End-to-end auth flow from the browser |
-| 8 — Observability | Pending | Spring Actuator, Micrometer metrics, structured logging with MDC |
+| 8 — Observability | ✅ Done | Spring Actuator, Micrometer metrics, structured logging with MDC |
 | 9 — Event Streaming | Pending | Apache Kafka pipeline for metrics + alerts (KRaft mode) |
 | 10 — Frontend Polish | Pending | Animations, loading skeletons, responsive design, dark/light mode |
 
@@ -426,7 +445,11 @@ infratrack/
 │       │                      event publisher, BCryptPasswordEncoderAdapter
 │       ├── config/            BeanConfiguration, SchedulingConfiguration, SecurityConfig
 │       ├── persistence/       JPA entities (incl. UserJpaEntity), mappers
-│       └── security/          EncryptedStringConverter (AES-256-GCM)
+│       └── security/          EncryptedStringConverter (AES-256-GCM),
+│                              JwtAuthenticationFilter (Bearer token, populates SecurityContext),
+│                              MdcCorrelationFilter (request correlation ids for structured logging),
+│                              RestAuthenticationEntryPoint (401 JSON),
+│                              RestAccessDeniedHandler (403 JSON)
 │
 ├── src/main/resources/
 │   ├── db/migration/          Flyway migrations (V1__initial_schema.sql, …)
