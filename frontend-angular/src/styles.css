@@ -1,0 +1,66 @@
+/* Infratrack dark theme — Style C (Hybrid Ops/Modern).
+ * Design tokens live here as CSS custom properties so presentational components can read
+ * threshold colors and status visual states without hardcoding magic values. */
+
+:root {
+  /* Surfaces */
+  --bg-base: #0c0f14;
+  --bg-card: #111621;
+  --bg-card-hover: #161c28;
+  --border-subtle: #1f2632;
+  --border-strong: #2a3340;
+
+  /* Text */
+  --text-primary: #e6edf3;
+  --text-secondary: #9aa7b5;
+  --text-muted: #6b7785;
+
+  /* Status colors (border-left 3px encodes asset status) */
+  --status-active: #4ade80;
+  --status-maintenance: #fbbf24;
+  --status-inactive: #6b7785;
+
+  /* Metric threshold bands */
+  --metric-ok: #4ade80;          /* 0-60% */
+  --metric-warning: #fbbf24;     /* 60-80% */
+  --metric-critical: #ef4444;    /* 80-100% */
+
+  /* Accent / interactive */
+  --accent: #38bdf8;
+  --accent-hover: #7dd3fc;
+  --danger: #ef4444;
+  --danger-hover: #fca5a5;
+
+  /* Layout */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  min-height: 100%;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input, select, textarea {
+  font-family: inherit;
+}

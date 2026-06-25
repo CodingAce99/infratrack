@@ -12,7 +12,7 @@ Replace the current `frontend/` Next.js static export with an Angular SPA using 
 | Asset state | `AssetService` exposes `assets$`, `loading$`, `error$`, mutation methods, and `refresh()` backed by `BehaviorSubject`/`Subject`, `switchMap`, `shareReplay(1)` | Component-local fetching | Replaces SWR with one shared replayed source and explicit mutation revalidation. |
 | Metrics state | `MetricService.history$(assetId)` returns independent 60s polling streams per card | Single dashboard-wide metrics request | Existing UI isolates metrics per asset; per-card streams preserve fault isolation and avoid blocking unrelated cards. |
 | Sparkline | Custom SVG path component | `ngx-charts` or another chart library | Recharts is React-only; SVG keeps the dependency graph small for a simple 32px sparkline. |
-| Tests | Angular CLI test foundation with at least one service test and one presentational component test | Defer frontend tests | The spec requires non-zero tests and CI confidence during the framework swap. |
+| Tests | Official Angular testing foundation with at least one service test and one presentational component test | Defer frontend tests or introduce third-party testing utilities in the first slice | The spec requires non-zero tests and CI confidence during the framework swap, and the first migration slice should minimize tooling risk by staying on Angular's standard testing stack. |
 
 ## Data Flow
 
@@ -56,10 +56,12 @@ export interface MetricSnapshot { assetId: string; cpuUsage: number; memoryUsage
 
 | Layer | What to Test | Approach |
 |-------|-------------|----------|
-| Unit | `AssetService` refresh/error behavior; threshold color helper; SVG path generation | Angular TestBed + Http testing utilities or Vitest-equivalent |
-| Component | `StatusBadge`, `MetricGauge`, empty sparkline state, form error rendering | Component tests with inputs and mocked services |
+| Unit | `AssetService` refresh/error behavior; threshold color helper; SVG path generation | Angular `TestBed` plus official `HttpClient` testing utilities (`provideHttpClientTesting`, `HttpTestingController`) |
+| Component | `StatusBadge`, `MetricGauge`, empty sparkline state, form error rendering | Angular component tests with inputs and mocked services using the official Angular testing stack |
 | Integration | Docker/nginx API proxy and Angular production build | CI build plus manual `docker-compose up -d` verification |
 | E2E | Browser auth flow | Out of scope for this slice |
+
+This migration slice intentionally stays on Angular's official testing foundation. Third-party testing utilities are not excluded forever, but they are deferred until the Angular frontend is stable and there is a demonstrated need that the default Angular stack cannot satisfy cleanly.
 
 ## Migration / Rollout
 
