@@ -1,66 +1,57 @@
 # Verification Report
 
 **Change**: angular-dashboard-migration  
-**Slice**: PR1 foundation slice only, tasks 1.1-1.10 plus PR1 correction batch  
+**Slice**: PR2 presentational-components slice only, tasks 2.1-2.5  
 **Version**: N/A  
 **Mode**: Strict TDD  
-**Artifact store**: hybrid, OpenSpec file plus Engram  
-**Re-verify date**: 2026-06-25  
+**Artifact store**: OpenSpec  
+**Verify date**: 2026-06-28  
 **Verdict**: PASS WITH WARNINGS
 
-PR1 is clean enough to proceed to PR2. The correction batch resolved the prior in-slice hygiene and runtime-test gaps, the Angular tests and build pass, the mandated Maven runner passes, and the remaining 60-second asset-list refresh is correctly deferred to Phase 3 rather than treated as a PR1 blocker.
+PR2 satisfies the approved presentational-component scope: `StatusBadgeComponent`, `MetricGaugeComponent`, `SparklineComponent`, `ConfirmDialogComponent`, and their supporting pure helpers are implemented, tested, and build successfully. No Phase 3 smart-dashboard implementation was found, but the raw changed-line count is materially over the 400-line review budget and the worktree contains non-Phase-2 config/task artifacts that should be handled intentionally before PR finalization.
 
 ## Scope Boundary
 
 | Dimension | Verification stance |
 |---|---|
-| Current slice | PR1 only: Angular scaffold, models, services, proxy, theme, app shell, and service tests. |
-| Completed tasks judged | 1.1-1.10 plus the PR1 correction batch recorded in `tasks.md`. |
-| Later tasks | 2.1-4.6 are expected remaining work and are not counted as PR1 failures. |
-| Deliberate staging deviation | Angular is staged in `frontend-angular/` instead of replacing `frontend/` yet. Accepted for chained-PR rollback safety; Phase 4 owns the final swap/removal. |
-| Context7 usage | Not used in this re-verify. The 60-second deferral is a project slice/design ownership question, not a version-sensitive Angular API question. |
-
-## Correction Batch Resolution
-
-| Prior finding | Re-verify result | Evidence |
-|---|---|---|
-| `AssetService.refresh()` load-error branch lacked runtime coverage | ✅ Resolved | `asset.service.spec.ts` now includes error emission/loading reset and preserve-last-list tests; coverage shows 100% line coverage for `asset.service.ts`. |
-| `DashboardPlaceholderComponent` had unused `RouterOutlet` import | ✅ Resolved | Source now imports only `ChangeDetectionStrategy` and `Component`; `npm run build` reports no warning. |
-| `app.config.ts` had unused `provideHttpClientTesting` production import | ✅ Resolved | Source now imports only runtime providers and documents testing provider ownership. |
-| Empty root-level `package-lock.json` | ✅ Resolved | Only `frontend/package-lock.json` and `frontend-angular/package-lock.json` are present. |
-| Branch coverage below 80% | ⚠️ Still present, non-blocking | Overall line coverage is 100%, but branch coverage remains 70% due fallback branches. Strict TDD marks coverage warnings as non-critical. |
-| 60-second asset-list refresh | ⏭️ Deferred, not PR1 blocker | The service foundation exposes `refresh()` and mutation revalidation. Phase 3 task 3.5 owns Dashboard composition and the automatic asset-list cadence. |
+| Current slice | PR2 only: presentational components and pure helpers for status badges, metric gauges, sparklines, and confirmation dialogs. |
+| Completed tasks judged | 2.1-2.5 from `openspec/changes/angular-dashboard-migration/tasks.md`. |
+| Later tasks | 3.1-4.6 remain expected future work and are not counted as PR2 failures. |
+| Phase 3 scope check | ✅ No `HeaderComponent`, `CreateAssetModalComponent`, `AssetCardComponent`, `EditAssetPanelComponent`, or real `DashboardComponent` implementation was found. Existing route still references the placeholder. |
+| Non-Phase-2 worktree items | ⚠️ `frontend-angular/tsconfig.json`, `frontend-angular/tsconfig.spec.json`, `openspec/changes/angular-dashboard-migration/tasks.md`, and this verify report are present in the worktree. They are not Phase 3 leakage, but they are not PR2 component implementation either. |
+| Staging deviation | Angular remains in `frontend-angular/`, consistent with the previously accepted chained-PR staging plan; final `frontend/` cutover remains Phase 4. |
 
 ## Completeness
 
 | Metric | Value |
 |---|---:|
-| Total change tasks | 29 |
-| PR1 tasks in scope | 10 |
-| PR1 tasks complete | 10 |
-| PR1 tasks incomplete | 0 |
-| Correction batch items complete | 4/4 |
-| Later phase tasks remaining | 19 |
+| Total checklist items, including PR1 correction batch | 33 |
+| Items complete before PR2 | 14 |
+| PR2 tasks in scope | 5 |
+| PR2 tasks complete | 5 |
+| PR2 tasks incomplete | 0 |
+| Later phase tasks remaining | 14 |
+| Full-change archive-ready | No |
 
 ## Build and Test Execution
 
-### Frontend unit tests
+### Frontend unit/component tests
 
 **Command**: `npm test` from `frontend-angular/`  
 **Result**: ✅ Passed
 
 ```text
-Chrome Headless 149.0.0.0 (Windows 10): Executed 20 of 20 SUCCESS
-TOTAL: 20 SUCCESS
+Chrome Headless 149.0.0.0 (Windows 10): Executed 53 of 53 SUCCESS
+TOTAL: 53 SUCCESS
 ```
 
 ### Frontend production build and type check
 
 **Command**: `npm run build` from `frontend-angular/`  
-**Result**: ✅ Passed, no warnings
+**Result**: ✅ Passed
 
 ```text
-Application bundle generation complete. [1.842 seconds]
+Application bundle generation complete. [2.050 seconds]
 Initial total: 235.37 kB / 67.54 kB
 Output location: frontend-angular/dist/frontend-angular/browser
 ```
@@ -71,156 +62,143 @@ Output location: frontend-angular/dist/frontend-angular/browser
 **Result**: ✅ Passed
 
 ```text
-Chrome Headless 149.0.0.0 (Windows 10): Executed 20 of 20 SUCCESS
-TOTAL: 20 SUCCESS
+Chrome Headless 149.0.0.0 (Windows 10): Executed 53 of 53 SUCCESS
+TOTAL: 53 SUCCESS
 
-Statements   : 100% (57/57)
-Branches     : 70% (7/10)
-Functions    : 100% (25/25)
-Lines        : 100% (54/54)
+Statements   : 100% (104/104)
+Branches     : 82.35% (14/17)
+Functions    : 100% (39/39)
+Lines        : 100% (96/96)
 ```
 
-### Mandated backend safety runner
+### Backend runner
 
-**Command**: `./mvnw test "-Dspring.profiles.active=dev"` from repo root  
-**Result**: ✅ Passed
-
-```text
-Tests run: 173, Failures: 0, Errors: 0, Skipped: 0
-BUILD SUCCESS
-```
-
-PowerShell quoting was used for the Maven `-Dspring.profiles.active=dev` property. The effective runner matches the strict TDD command requested by the orchestrator.
+Not run for this verification. PR2 changed only Angular/OpenSpec files, and the orchestrator explicitly mandated the Strict TDD runner inside `frontend-angular/`.
 
 ## TDD Compliance
 
 | Check | Result | Details |
 |---|---|---|
-| TDD evidence reported | ✅ | The apply-progress artifact contains a TDD Cycle Evidence table. |
-| All logic tasks have tests | ✅ | AssetService, MetricService, and AppComponent test files exist. Config, CSS, and type-only tasks are correctly reported as N/A. |
-| RED confirmed | ✅ | Reported test files exist. Historical red states cannot be replayed after implementation, but the current test files are present and behavior-focused. |
-| GREEN confirmed | ✅ | `npm test` executed 20/20 tests successfully. |
-| Triangulation adequate | ✅ | AssetService has 13 cases, MetricService has 5 cases, and AppComponent has 2 cases. |
-| Safety net for modified files | ✅ | Apply-progress records the correction batch safety net. Current re-run confirms the final green state across frontend and Maven suites. |
+| TDD evidence reported | ✅ | The `sdd/angular-dashboard-migration/apply-progress` artifact contains a TDD Cycle Evidence table for PR2. |
+| All PR2 tasks have tests | ✅ | Test files exist for threshold helper, sparkline path helper, status badge, metric gauge, sparkline, and confirm dialog. |
+| RED confirmed | ✅ | Reported test files exist in the codebase. Historical red states cannot be replayed after implementation, but the required files and behavior-focused cases are present. |
+| GREEN confirmed | ✅ | `npm test` executed 53/53 tests successfully, including all PR2 tests. |
+| Triangulation adequate | ✅ | PR2 has 33 new tests: 10 pure-helper unit tests and 23 component tests across varied inputs/outputs, including width-clamp edge cases. |
+| Safety net for modified files | ✅ | PR2 production files are new. Existing PR1 tests also ran as part of the 53-test suite. |
 
-**TDD Compliance**: 6/6 checks passed for PR1 scope.
+**TDD Compliance**: 6/6 checks passed for PR2 scope.
 
 ## Test Layer Distribution
 
 | Layer | Tests | Files | Tools |
 |---|---:|---:|---|
-| Unit, service | 18 | 2 | Angular TestBed, Jasmine, Karma, ChromeHeadless, HttpTestingController |
-| Unit, component | 2 | 1 | Angular TestBed with standalone component import |
-| Integration | 0 | 0 | Deferred to later slices |
-| E2E | 0 | 0 | Out of scope |
-| **Total** | **20** | **3** | |
+| Unit, pure functions | 10 | 2 | Jasmine, Karma, ChromeHeadless |
+| Component | 23 | 4 | Angular TestBed, Jasmine, Karma, ChromeHeadless |
+| Existing PR1 regression tests | 20 | 3 | Angular TestBed, HttpTestingController, Jasmine, Karma |
+| Integration | 0 | 0 | Out of scope for PR2 |
+| E2E | 0 | 0 | Out of scope for PR2 |
+| **Total executed** | **53** | **9** | |
 
 ## Changed File Coverage
 
-| File | Line % | Branch % | Uncovered lines or branches | Rating |
+| File | Line % | Branch % | Uncovered lines | Rating |
 |---|---:|---:|---|---|
-| `src/app/app.component.ts` | 100% | 100% | None | ✅ Excellent |
-| `src/app/core/api-error.ts` | 100% | 100% | None | ✅ Excellent |
-| `src/app/core/asset.service.ts` | 100% | 66.66% | Branches only: `data ?? []` fallback and fallback `API error: ${status}` message | ⚠️ Excellent line coverage, low branch coverage |
-| `src/app/core/metric.service.ts` | 100% | 75% | Branch only: fallback `API error: ${status}` message | ⚠️ Excellent line coverage, low branch coverage |
+| `src/app/assets/status-badge.component.ts` | 100% | 100% | None | ✅ Excellent |
+| `src/app/metrics/metric-gauge.component.ts` | 100% | 100% | None | ✅ Excellent |
+| `src/app/metrics/sparkline-path.ts` | 100% | 100% | None | ✅ Excellent |
+| `src/app/metrics/sparkline.component.ts` | 100% | 100% | None | ✅ Excellent |
+| `src/app/metrics/threshold-color.ts` | 100% | 100% | None | ✅ Excellent |
+| `src/app/shared/confirm-dialog.component.ts` | 100% | 100% | None | ✅ Excellent |
 
-Coverage reports did not instrument config, routes, CSS, proxy, or type-only model files. Those were verified by source inspection and `ng build`.
+**Average changed production-file line coverage**: 100%  
+Coverage did not instrument `.spec.ts`, OpenSpec markdown, or TypeScript config files; those were verified by source inspection and command execution.
 
 ## Assertion Quality
 
-**Assertion quality**: ✅ All assertions verify real behavior.
+**Assertion quality**: ✅ No critical or warning-level assertion-quality issues found in PR2 tests.
 
 Notes:
-- Empty-array assertions in `metric.service.spec.ts` and `asset.service.spec.ts` are paired with non-empty behavior tests, so they are not orphan empty checks.
-- Tests call production services or create real Angular components through TestBed.
-- No tautologies, ghost loops, type-only assertions, or smoke-test-only component tests were found.
+- No tautologies, ghost loops, orphan empty assertions, CSS-class assertions, or mock-heavy tests were found.
+- The no-API-dependency tests use a minimal `TestBed` with only the standalone component imported; construction would fail if the component injected `HttpClient` or a service. Those tests are paired with behavioral assertions in the same component spec files.
+- `data-status` and `data-threshold` assertions verify semantic visual-state markers rather than CSS implementation classes.
 
 ## Quality Metrics
 
 **Linter**: ➖ Not available. No lint script is defined in `frontend-angular/package.json`.  
-**Type checker**: ✅ `ng build` passed.  
-**Compiler warnings**: ✅ None.  
-**Generated artifacts**: ⚠️ `frontend-angular/coverage/` is produced by the coverage command and is not ignored by `frontend-angular/.gitignore`; it must not be included in the PR.
+**Type checker**: ✅ `ng build` passed, and `npm test` compiled the spec project.  
+**Compiler warnings**: ✅ None observed in `npm run build`.  
+**Generated artifacts**: ✅ Running build/coverage did not leave visible untracked generated artifacts in `git status --short`.
 
-## Spec Compliance Matrix, PR1-Relevant Scenarios
+## Spec Compliance Matrix, PR2-Relevant Scenarios
 
 | Requirement | Scenario | Test or evidence | Result |
 |---|---|---|---|
-| Angular Shell and API Compatibility | Dashboard opens | `app.component.spec.ts` verifies brand text and `router-outlet`; `ng build` succeeds with placeholder route. | ⚠️ PARTIAL, shell exists but real dashboard/header/asset area is Phase 3. |
-| Angular Shell and API Compatibility | Backend unavailable | `asset.service.spec.ts` now verifies load failure emits `ApiError`, resets loading, and preserves the latest list. UI error state remains Phase 3. | ⚠️ PARTIAL for full UI scenario, compliant for PR1 service foundation. |
-| Shared Asset State and Mutations | Asset list is shared | `asset.service.spec.ts` verifies initial replayed value and latest list emission after refresh. | ✅ COMPLIANT for PR1 service foundation. |
-| Shared Asset State and Mutations | Mutation refreshes list | `asset.service.spec.ts` verifies successful create, status, IP, credentials, and delete trigger revalidation GETs. | ✅ COMPLIANT. |
-| Shared Asset State and Mutations | Duplicate IP is rejected | `asset.service.spec.ts` verifies 409 becomes `ApiError`, no revalidation GET occurs, and previous list remains visible. | ✅ COMPLIANT. |
-| Shared Asset State and Mutations | 60-second asset-list refresh | `tasks.md` explicitly defers this to Phase 3 task 3.5, where `DashboardComponent` owns composition/cadence. | ⏭️ DEFERRED, not a PR1 blocker. |
-| Dashboard CRUD Workflows | Create asset | Service command and refresh path covered; UI modal workflow deferred. | ⚠️ PARTIAL, expected for PR1. |
-| Dashboard CRUD Workflows | Delete requires confirmation | Delete service exists and is tested; confirmation UI deferred to Phase 2/3. | ⏭️ DEFERRED. |
-| Per-Asset Metrics and Sparklines | Metrics update independently | `metric.service.spec.ts` verifies independent per-asset streams and distinct HTTP requests. | ✅ COMPLIANT. |
-| Per-Asset Metrics and Sparklines | Empty history is safe | `metric.service.spec.ts` verifies empty backend response and backend error both emit an empty list. | ✅ COMPLIANT for service foundation. |
-| Component Boundaries and Theme | Presentational component renders from inputs | Presentational components are Phase 2. Theme tokens exist in `styles.css`. | ⏭️ DEFERRED for component behavior. |
-| Component Boundaries and Theme | Metric threshold color applies | MetricGauge is Phase 2. Theme threshold tokens exist. | ⏭️ DEFERRED. |
-| Build, Docker, and Tests | Docker serves dashboard | Phase 4. | ⏭️ DEFERRED. |
-| Build, Docker, and Tests | Frontend tests run | `npm test` executed 20 Angular tests successfully. | ✅ COMPLIANT. |
+| Dashboard CRUD Workflows | Delete requires confirmation | `confirm-dialog.component.spec.ts` verifies message rendering, confirm output, cancel button output, backdrop cancel, and body click propagation stop. | ⚠️ PARTIAL: confirmation primitive compliant; asset-delete wiring remains Phase 3. |
+| Per-Asset Metrics and Sparklines | Empty history is safe | `sparkline.component.spec.ts` verifies empty and single-point data render a stable `No data` state; `sparkline-path.spec.ts` returns `null` for fewer than two points. | ✅ COMPLIANT for PR2 presentational behavior. |
+| Per-Asset Metrics and Sparklines | Sparklines without external chart dependency | `sparkline.component.ts` renders a native SVG path from `buildSparklinePath`; `package.json` contains no charting dependency. | ✅ COMPLIANT. |
+| Component Boundaries and Theme | Presentational component renders from inputs | `status-badge.component.spec.ts` verifies `ACTIVE` renders the active label and semantic `data-status`; grep found no API/service dependency in PR2 component implementation files. | ✅ COMPLIANT. |
+| Component Boundaries and Theme | Metric threshold color applies | `metric-gauge.component.spec.ts` verifies `75%` maps to `warning`; `threshold-color.spec.ts` verifies ok/warning/critical bands and clamping. | ✅ COMPLIANT. |
+| Build, Docker, and Tests | Frontend tests run | `npm test` executed 53 Angular tests successfully. | ✅ COMPLIANT for PR2 test-suite requirement. |
+| Build, Docker, and Tests | Docker serves dashboard | Phase 4 task 4.5. | ⏭️ DEFERRED, not PR2 scope. |
+| Angular Shell and API Compatibility | Dashboard opens / backend unavailable | PR1/Phase 3 ownership. PR2 did not modify shell or API state behavior. | ⏭️ OUT OF PR2 SCOPE. |
+| Shared Asset State and Mutations | Asset list shared / mutation refresh / duplicate IP | PR1 service ownership; existing tests were rerun in the 53-test suite. | ⏭️ PREVIOUS SLICE, not re-judged as PR2 implementation. |
+| Dashboard CRUD Workflows | Create asset | Phase 3 modal/form ownership. | ⏭️ DEFERRED, not PR2 scope. |
+| Per-Asset Metrics and Sparklines | Metrics update independently | PR1 `MetricService` ownership and Phase 3 `AssetCard` composition ownership. | ⏭️ PREVIOUS/FUTURE SLICE. |
 
-**Compliance summary for PR1-counted scenarios**: 6 compliant, 4 partial/deferred as expected for the slice, 0 failing.
+**Compliance summary for PR2-counted scenarios**: 5 compliant, 1 partial by design, 0 failing, 0 untested for PR2 scope.
 
 ## Correctness, Static Evidence
 
 | Requirement or task | Status | Notes |
 |---|---|---|
-| 1.1 Angular CLI scaffold | ✅ Implemented | `package.json`, `angular.json`, strict tsconfigs, lockfile, and CLI scripts exist under `frontend-angular/`. |
-| 1.2 Models | ✅ Implemented | REST-facing `Asset`, `MetricSnapshot`, request types, and constants exist in `core/models.ts`. |
-| 1.3 ApiError | ✅ Implemented | `ApiError` preserves status and prototype chain. |
-| 1.4 AssetService | ✅ Implemented | CRUD endpoints, shared `assets$`, `loading$`, `error$`, and explicit revalidation on successful mutations exist. Load-error branch is now tested. |
-| 1.5 MetricService | ✅ Implemented | `history$(assetId)` uses `timer(0, 60000)`, `switchMap`, per-asset URLs, and safe empty lists on error. |
-| 1.6 Dev proxy | ✅ Implemented | `proxy.conf.json` maps `/api` to `http://localhost:8080`. |
-| 1.7 Dark theme | ✅ Implemented | CSS custom properties define dark surfaces, status colors, metric thresholds, font stacks, and layout tokens. |
-| 1.8 App shell | ✅ Implemented | Standalone `AppComponent`, `app.config.ts`, routes, index, and placeholder route build without warnings. |
-| 1.9 AssetService tests | ✅ Implemented | 13 service tests pass at runtime, including correction-batch load-error coverage. |
-| 1.10 MetricService tests | ✅ Implemented | 5 service tests pass at runtime. |
+| 2.1 `StatusBadgeComponent` | ✅ Implemented | Standalone OnPush component receives `AssetStatus`, renders label, and exposes semantic `data-status`; no API imports. |
+| 2.2 `MetricGaugeComponent` | ✅ Implemented | Standalone OnPush component receives label/value, computes threshold with `metricThresholdColor`, and clamps rendered fill width to the 0-100% visual range. |
+| 2.2 threshold helper | ✅ Implemented | `metricThresholdColor()` maps values to `ok`, `warning`, `critical` and clamps out-of-range values for threshold-state safety. |
+| 2.3 `SparklineComponent` | ✅ Implemented | Standalone OnPush component renders a custom SVG path or stable empty state; no chart library. |
+| 2.3 SVG path helper | ✅ Implemented | `buildSparklinePath()` handles fewer than two points, y-axis inversion, min/max normalization, full-width layout, and flat series. |
+| 2.4 `ConfirmDialogComponent` | ✅ Implemented | Receives message input and emits confirm/cancel outputs; backdrop cancel and body propagation handling are covered. |
+| 2.5 Tests | ✅ Implemented | All PR2 component/helper tests exist and passed at runtime. |
+| Phase 3 leakage | ✅ Not found | Search found only placeholder mentions of `DashboardComponent`; no smart component implementation files exist. |
 
 ## Design Coherence
 
 | Design decision | Followed? | Notes |
 |---|---|---|
-| Standalone Angular app | ✅ Yes | Standalone components, `bootstrapApplication`, provider-based app config, and lazy route component are used. |
-| Stage in `frontend/` replacement path | ⚠️ Deliberate PR1 deviation | Implementation uses `frontend-angular/` to avoid breaking the existing Next.js frontend before Phase 4. This is coherent with chained PR safety. |
-| Asset state with replayed latest data and mutation revalidation | ✅ Yes for PR1 behavior | `BehaviorSubject` provides replayed latest data and successful mutations call `refresh()`. The automatic 60-second asset-list cadence remains assigned to Phase 3 Dashboard composition. |
-| Metrics state independent per card | ✅ Yes | Each `history$(assetId)` subscription schedules independent polling and catches backend errors into `[]`. |
-| Official Angular testing foundation | ✅ Yes | Karma/Jasmine/TestBed/HttpTestingController only. No third-party testing utilities. |
-| Dark theme tokens | ✅ Yes | Global CSS variables establish the intended dark operations theme foundation. |
-| Docker/nginx/CI cutover | ⏭️ Deferred | Correctly left for Phase 4. |
+| Standalone Angular components | ✅ Yes | All PR2 components are standalone and use `ChangeDetectionStrategy.OnPush`. |
+| Presentational components remain API-free | ✅ Yes | PR2 components use inputs/outputs and pure helpers only; no `HttpClient`, `AssetService`, or `MetricService` dependency was found in implementation files. |
+| Custom SVG sparkline | ✅ Yes | `SparklineComponent` uses a native SVG `<path>` generated by `buildSparklinePath`; no charting dependency was added. |
+| Dark-theme visual-state tokens | ✅ Yes | `data-status` and `data-threshold` drive styles backed by the existing CSS custom properties in `styles.css`. |
+| Official Angular testing foundation | ✅ Yes | Tests use Angular TestBed/Jasmine/Karma only; no third-party test utility was introduced. |
+| Feature-folder approach | ✅ Yes with small refinement | Components live under `assets/`, `metrics/`, and `shared/`; `ConfirmDialogComponent` is currently shared by location but still delete-flow-specific in copy. |
+| Workspace path in `frontend-angular/` | ⚠️ Accepted staging deviation | The approved design names `frontend/src/app`, but prior PR1 verification accepted `frontend-angular/` staging until Phase 4 cutover. |
 
-## 60-Second Asset-List Refresh Reassessment
+## Review Budget and Scope Leak Assessment
 
-The remaining 60-second asset-list refresh should stay deferred to Phase 3 and is not a PR1 blocker.
-
-Reasoning:
-- PR1 task 1.4 requires the shared service foundation: `assets$`, `loading$`, `error$`, `refresh()`, and CRUD via HttpClient. That is implemented and tested.
-- The full spec requires a 60-second asset-list refresh, but PR1 intentionally has no real `DashboardComponent` yet. It only has a shell and placeholder route.
-- `tasks.md` now explicitly assigns the cadence to Phase 3 task 3.5, where `DashboardComponent` becomes the composition root.
-- Adding a timer inside `AssetService` during PR1 would cross the slice boundary and could hard-code a subscription policy before the component ownership exists.
-
-Verification consequence: not a PR1 failure, but it must be implemented and tested before final full-change verification/archive.
+| Check | Result | Evidence |
+|---|---|---|
+| 400-line budget | ⚠️ Over budget | Untracked PR2 source/spec files total 728 added lines after the metric gauge clamp tests. Tracked config/tasks/report changes add a small additional delta, so the slice remains materially above the 400-line budget even after removing `exploration.md`. |
+| Maintainer-approved exception | ✅ Accepted | User explicitly approved PR2 exceeding the budget, and the launch context confirms a maintainer-approved `size:exception`. |
+| Is the overrun justified? | ⚠️ Justified but not slight by raw accounting | The slice is cohesive and mostly tests + inline component styles, so keeping it together is defensible. However, the overrun is materially above 400 lines and should not be described as merely slight in PR metadata. |
+| Phase 3 leakage | ✅ None found | No smart dashboard components were implemented. |
+| Non-PR2 artifacts | ⚠️ Present | `frontend-angular/tsconfig.json`, `frontend-angular/tsconfig.spec.json`, `openspec/changes/angular-dashboard-migration/tasks.md`, and this verify report remain in the review package as intentional non-component support artifacts. |
 
 ## Issues Found
 
 ### CRITICAL
 
-None for the PR1 slice.
+None for the PR2 slice.
 
 ### WARNING
 
-1. Branch coverage remains below 80% for service fallback branches: `asset.service.ts` at 66.66% and `metric.service.ts` at 75%. Line coverage is 100%, so this is not blocking under Strict TDD rules.
-2. The spec-level 60-second asset-list refresh is still deferred to Phase 3. This is accepted for PR1, but it is mandatory before final migration verification.
-3. `frontend-angular/coverage/` is generated by coverage runs and is not ignored by `frontend-angular/.gitignore`. Exclude it from PR1 or add an ignore rule before staging the Angular directory.
+1. PR2 materially exceeds the 400-line review budget by raw accounting even after removing `exploration.md`. The approved size exception prevents this from blocking PR2, but the PR description should be honest that this is more than a slight overrun.
+2. The worktree includes non-Phase-2 support artifacts: `frontend-angular/tsconfig.json`, `frontend-angular/tsconfig.spec.json`, `openspec/changes/angular-dashboard-migration/tasks.md`, and this verify report. These are not Phase 3 leakage, but they should be intentionally included in the PR review package.
 
 ### SUGGESTION
 
-1. Add focused fallback-message branch tests later if the team wants branch coverage above 80%.
-2. Add a route-level behavior test once the real `DashboardComponent` replaces the placeholder in Phase 3.
+1. If `ConfirmDialogComponent` is reused beyond deletion flows later, consider configurable confirm/cancel labels; the current hard-coded `Delete` label is acceptable for the current delete workflow.
 
 ## Final Verdict
 
 **PASS WITH WARNINGS**
 
-PR1 is clean enough to proceed to PR2. The prior in-slice warnings were resolved, the 60-second asset-list refresh is correctly deferred to Phase 3, and the only remaining warnings are non-blocking coverage/generated-artifact hygiene items.
+PR2 is functionally and test-wise ready for review: all Phase 2 tasks are implemented, 53 Angular tests pass, the production build passes, and no Phase 3 implementation leaked. The warnings are review-package hygiene and budget honesty issues, not behavior blockers.

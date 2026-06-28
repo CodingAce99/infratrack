@@ -48,11 +48,11 @@ Chain strategy: stacked-to-main
 
 ## Phase 2: Presentational Components
 
-- [ ] 2.1 `StatusBadgeComponent`: input status, pure presentational
-- [ ] 2.2 `MetricGaugeComponent`: input value, threshold color (green/amber/red)
-- [ ] 2.3 `SparklineComponent`: custom SVG path, empty state, no chart library
-- [ ] 2.4 `ConfirmDialogComponent`: input message, output confirm/cancel
-- [ ] 2.5 Test: all presentational components render from inputs correctly
+- [x] 2.1 `StatusBadgeComponent`: input status, pure presentational
+- [x] 2.2 `MetricGaugeComponent`: input value, threshold color (green/amber/red)
+- [x] 2.3 `SparklineComponent`: custom SVG path, empty state, no chart library
+- [x] 2.4 `ConfirmDialogComponent`: input message, output confirm/cancel
+- [x] 2.5 Test: all presentational components render from inputs correctly
 
 ## Phase 3: Smart Dashboard Components
 
