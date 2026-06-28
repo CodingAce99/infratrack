@@ -12,7 +12,7 @@ Replace the Next.js dashboard with an Angular SPA that preserves all functional 
 - `MetricGauge`, custom-SVG `Sparkline` (no charting library), `StatusBadge`
 - Dark-theme default design system (CSS custom properties, threshold color logic)
 - Updated `frontend/Dockerfile` (`dist/frontend/browser`) + nginx config
-- Frontend testing foundation (Karma/Jasmine or Vitest-equivalent)
+- Frontend testing foundation using Angular's official testing stack for the first slice
 
 ### Out of Scope
 - Login page, JWT interceptor, route guards (Sprint 7.4–7.5)
