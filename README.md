@@ -14,7 +14,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 
 - **Hexagonal Architecture** — Domain layer with zero framework dependencies. Swappable adapters for REST, JPA, SSH, and in-memory storage.
 - **SSH Monitoring** — Proactive metric collection via SSHJ. A scheduler connects to assets over SSH, extracts CPU/memory/disk metrics, and persists historical data — all parallelized with Virtual Threads.
-- **React Dashboard with full CRUD** — Real-time monitoring UI built with Next.js 15 and TypeScript. Create, edit, and delete assets directly from the dashboard via modal and inline edit panels. Auto-refreshing metrics with SWR polling, sparkline charts via Recharts, and a dark ops-themed interface. Served as a static export through nginx with reverse proxy to the backend — zero CORS configuration needed.
+- **Angular Dashboard with full CRUD** — Real-time monitoring UI built with Angular 19 and TypeScript. Create, edit, and delete assets directly from the dashboard via modal and inline edit panels. Auto-refreshing metrics with RxJS polling, sparkline charts via a custom SVG component (no chart library), and a dark ops-themed interface. Served as static assets through nginx with reverse proxy to the backend — zero CORS configuration needed.
 - **Domain Events** — Async event bus decouples asset lifecycle from downstream reactions. Events are pure Java records; adding new listeners requires zero changes to existing code.
 - **Security by construction** — SSH credentials encrypted with AES-256-GCM at rest. API responses structurally cannot contain passwords (`AssetResponse` has no password field — not hidden, *absent*).
 - **CI/CD** — GitHub Actions pipeline validates every push. Multi-stage Docker build produces a minimal JRE image. `docker-compose up` starts the entire ecosystem in one command.
@@ -35,7 +35,7 @@ Infratrack bridges the gap between physical inventory and the logical state of a
 | Schema migrations | Flyway 11 |
 | Encryption | AES-256-GCM via JPA AttributeConverter |
 | SSH | SSHJ 0.40.0 |
-| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS v4, Recharts, SWR |
+| Frontend | Angular 19, TypeScript, RxJS, Karma/Jasmine |
 | CI/CD | GitHub Actions |
 | Containerization | Docker, Docker Compose, multi-stage builds |
 | Testing | JUnit 5, Mockito |
@@ -106,7 +106,7 @@ flowchart TB
 
 ### Runtime data flow
 
-The system has two pipelines that run independently. The **write pipeline** is time-driven: every 60 seconds the scheduler fans out one Virtual Thread per active asset and persists fresh metrics. The **read pipeline** is on-demand: the browser polls the API every 60 seconds via SWR, and nginx forwards `/api/*` to the Spring Boot backend.
+The system has two pipelines that run independently. The **write pipeline** is time-driven: every 60 seconds the scheduler fans out one Virtual Thread per active asset and persists fresh metrics. The **read pipeline** is on-demand: the browser polls the API every 60 seconds via RxJS, and nginx forwards `/api/*` to the Spring Boot backend.
 
 ```mermaid
 flowchart LR
@@ -132,7 +132,7 @@ flowchart LR
         REST["MetricsRestController<br/>/api/v1/assets/{id}/metrics/history"]
         DB2[("PostgreSQL 17<br/>metrics history")]
 
-        Browser -->|SWR poll 60s| Nginx
+        Browser -->|RxJS poll 60s| Nginx
         Nginx -->|/api/*| REST
         REST -->|read| DB2
         DB2 -->|JSON| REST
@@ -168,9 +168,9 @@ Asset lifecycle changes publish domain events through a port interface (`DomainE
 
 ### Frontend
 
-The React dashboard (`frontend/`) is a Next.js 15 static export served by nginx. It connects to the backend API through nginx reverse proxy — both frontend and API are same-origin from the browser's perspective, eliminating CORS entirely. SWR handles data fetching with automatic 60-second polling. Each `AssetCard` component owns its own metrics SWR call, following the single-responsibility principle.
+The Angular dashboard (`frontend-angular/`) is an Angular 19 single-page application served by nginx. It connects to the backend API through nginx reverse proxy — both frontend and API are same-origin from the browser's perspective, eliminating CORS entirely. RxJS drives data fetching with automatic 60-second polling; each `AssetCard` component owns its own metrics subscription, following the single-responsibility principle.
 
-The dashboard supports full asset management from the UI: a "+ Add Asset" modal for creation, an inline edit panel on each card for status, IP and credential updates (one Save button per section, mapped 1:1 to its REST endpoint), and a confirmation dialog for deletion. Mutations use `useSWRConfig().mutate` to revalidate the asset list after each successful operation — no manual state management, no prop drilling.
+The dashboard supports full asset management from the UI: a "+ Add Asset" modal for creation, an inline edit panel on each card for status, IP and credential updates (one Save button per section, mapped 1:1 to its REST endpoint), and a confirmation dialog for deletion. Mutations revalidate the shared asset-list stream after each successful operation — no manual state management, no prop drilling.
 
 ---
 
@@ -402,13 +402,13 @@ The encryption converter is transparent to the domain — it operates at the JPA
 | 2 — Asset CRUD + Encryption | ✅ Done | Full CRUD with AES-256-GCM encrypted credentials |
 | 3 — DTO Layer + Domain Events | ✅ Done | Request/Response DTOs, Bean Validation, event bus |
 | 4 — SSH Monitoring | ✅ Done | Metrics collection, persistence, SSH connections, REST API |
-| 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with full CRUD, SWR polling and Recharts sparklines |
+| 5 — Dashboard | ✅ Done | Angular 19 + TypeScript dashboard with full CRUD, RxJS polling and custom SVG sparklines |
 | 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build |
 | 6.5 — Flyway | ✅ Done | Versioned schema migrations replacing static schema.sql |
 | 7.1 — User persistence | ✅ Done | User domain (Username, EncodedPassword, UserRole), JPA + BCrypt, seed admin/viewer via Flyway V2/V3 |
 | 7.2 — JWT + login | ✅ Done | Login endpoint `POST /api/v1/auth/login` returning a signed JWT (HS256, 1h) |
 | 7.3 — Security filter + roles | ✅ Done | Real `SecurityFilterChain`, JWT validation filter, role enforcement (ADMIN write / VIEWER read) |
-| 7.4 — Login UI + token storage | Pending | Frontend login page, token in React context |
+| 7.4 — Login UI + token storage | Pending | Angular login page and token storage service |
 | 7.5 — Protected routes + 401/403 | Pending | End-to-end auth flow from the browser |
 | 8 — Observability | ✅ Done | Spring Actuator, Micrometer metrics, structured logging with MDC |
 | 9 — Event Streaming | Pending | Apache Kafka pipeline for metrics + alerts (KRaft mode) |
@@ -456,12 +456,11 @@ infratrack/
 │   ├── application.yml        Base config (Flyway, JPA, datasource)
 │   └── application-{dev,demo,prod}.yml   Profile-specific overrides
 │
-└── frontend/
-    ├── app/                   Next.js App Router (layout, page, globals.css)
-    ├── components/            Dashboard, AssetCard, MetricGauge, Sparkline, Header, StatusBadge,
-    │                          CreateAssetModal, EditAssetPanel, ConfirmDialog
-    ├── hooks/                 useAssets (SWR hook for asset list)
-    ├── lib/                   API client (fetcher + mutation functions + ApiError), TypeScript interfaces
-    ├── docker/nginx.conf      Static serving + reverse proxy to backend
-    └── Dockerfile             Multi-stage: Node build → nginx serve (~25MB)
+└── frontend-angular/
+    ├── src/app/               Angular app (dashboard, assets, core services, shared presentational components)
+    ├── src/main.ts            Bootstrap entry point
+    ├── nginx.conf             Static serving + reverse proxy to backend (used by the Docker image)
+    ├── karma.conf.js          Karma + Jasmine + ChromeHeadless (CI-friendly NoSandbox launcher)
+    ├── Dockerfile             Multi-stage: Node build → nginx serve
+    └── angular.json           Angular CLI workspace config
 ```

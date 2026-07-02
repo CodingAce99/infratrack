@@ -1,0 +1,11 @@
+# Keep the Docker build context lean — exclude local build artifacts and deps
+# so they never leak into the image or bust the dependency cache layer.
+node_modules
+dist
+.angular
+coverage
+out-tsc
+.git
+.gitignore
+*.log
+.DS_Store

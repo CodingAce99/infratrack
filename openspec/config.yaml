@@ -6,7 +6,7 @@ context: |
   Architecture: Hexagonal (Ports & Adapters) — strict layer boundaries, domain has zero framework dependencies
   Testing: Backend — JUnit 5 + Mockito, @WebMvcTest slices, Testcontainers. Frontend — Karma + Jasmine with ChromeHeadless (specs alongside each component/service in frontend-angular/).
   Style: Factory methods over constructors, self-validating VOs, DTO mappers in adapter layer, explicit wiring in BeanConfiguration
-  Frontend note: legacy Next.js app under frontend/ is superseded by frontend-angular/ and slated for removal in PR4 of angular-dashboard-migration.
+  Frontend note: Angular 19 SPA under frontend-angular/ (Next.js app under frontend/ was removed in PR4 of angular-dashboard-migration).
 
 rules:
   proposal:

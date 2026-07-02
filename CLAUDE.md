@@ -107,44 +107,51 @@ Events are plain Java records — no Spring, no JPA. `SpringEventPublisher` impl
 
 ## Frontend
 
-React dashboard in `frontend/`. Next.js 15 with App Router, TypeScript, Tailwind CSS v4, Recharts, SWR.
+Angular 19 SPA in `frontend-angular/`. TypeScript, standalone components (OnPush, signal `input()`/`output()`), RxJS, Karma/Jasmine. The legacy Next.js app under `frontend/` was removed in the Angular dashboard migration (PR4).
 
 ### Architecture
 
-- `layout.tsx` (server component) → `page.tsx` (server) → `Dashboard.tsx` (client, `"use client"`)
-- Each `AssetCard` owns its SWR call for metrics — avoids Rules of Hooks violation
-- `useAssets.ts` hook manages asset list only (single responsibility)
-- Static export (`output: 'export'`) — no Node.js server in production, nginx serves HTML
+- Standalone components, no NgModules; `OnPush` change detection throughout
+- `AssetService` / `MetricService` (RxJS BehaviorSubjects/timers) are the shared state root — no global store
+- `DashboardComponent` is the composition root: owns `editingAssetId` (single-edit invariant), 60s interaction-safe refresh (suppressed while a modal/panel is open), connection flag from latest API check
+- Each `AssetCard` owns its own `MetricService.history$(id)` subscription (per-asset polling isolation)
+- Production build → static assets served by nginx (no Node.js server in production)
 
 ### Component tree
 
 ```
-Dashboard (client component, useAssets hook)
-├── Header (asset count, connection indicator, "+ Add Asset" button)
-│   └── CreateAssetModal (modal with 5-field form, POST /api/v1/assets)
-└── AssetCard × N (each owns useSWR for metrics, manages its own isEditing state)
-    ├── StatusBadge (ACTIVE/MAINTENANCE/INACTIVE pill)
-    ├── MetricGauge × 3 (CPU, Memory, Disk)
-    │   └── Sparkline (Recharts LineChart, last 20 data points)
-    └── EditAssetPanel (inline, opens on Edit click)
+DashboardComponent (composition root: assets$, 60s refresh, editingAssetId, connection, modal state)
+├── HeaderComponent (assetCount, isConnected, canManage, addAsset output)
+│   └── CreateAssetModalComponent (ReactiveForms 5-field form → AssetService.createAsset)
+└── AssetCardComponent × N (owns MetricService.history$ subscription, isEditing input)
+    ├── StatusBadgeComponent (ACTIVE/MAINTENANCE/INACTIVE pill)
+    ├── MetricGaugeComponent × 3 (CPU, Memory, Disk; threshold color)
+    │   └── SparklineComponent (custom SVG path, no chart library)
+    └── EditAssetPanelComponent (three independent ReactiveForms sections)
         ├── Status section → PUT /{id}/status
         ├── IP section → PUT /{id}/ip
         ├── Credentials section → PUT /{id}/credentials
-        └── ConfirmDialog (reusable: message, onConfirm, onCancel) → DELETE /{id}
+        └── ConfirmDialogComponent (reusable: message, confirm, cancel) → DELETE /{id}
 ```
 
 ### Data fetching
 
-- SWR with `refreshInterval: 60000` for automatic 60s polling
-- `API_BASE_URL = ''` (empty) — relative URLs work in both dev (Next.js rewrites) and Docker (nginx proxy)
-- History endpoint (`/metrics/history?limit=20`) provides both latest value and sparkline data
-- **Mutations:** `CreateAssetModal` and `EditAssetPanel` call mutation functions in `lib/api.ts` (createAsset, updateStatus, updateIp, updateCredentials, deleteAsset). Each throws `ApiError` with HTTP status on failure (409 duplicate IP, 400 validation, 404 not found). After success, components call `useSWRConfig().mutate('/api/v1/assets')` to revalidate the list — no prop drilling, no manual state management. After delete, no extra cleanup is needed: React unmounts the card and SWR garbage-collects the metrics cache automatically.
+- `AssetService` exposes replayed `assets$`/`loading$`/`error$`; mutations revalidate the list internally
+- `MetricService.history$(assetId)` polls `/api/v1/assets/{id}/metrics/history` every 60s per asset
+- Relative `/api` URLs work in dev (`proxy.conf.json`) and Docker (nginx reverse proxy)
+- Failed mutations surface errors and preserve the last valid list
 
 ### Frontend Docker
 
-- Multi-stage: `node:20-alpine` build → `nginx:alpine` serve (~25MB final image)
-- nginx serves static files at `/` and reverse proxies `/api/` to `app:8080`
+- Multi-stage `frontend-angular/Dockerfile`: `node:20-alpine` build → `nginx:alpine` serve
+- `frontend-angular/nginx.conf`: serves `dist/frontend-angular/browser` at `/`, reverse-proxies `/api/` and `/actuator/` to `app:8080`, SPA fallback `try_files $uri $uri/ /index.html`
+- `docker-compose.yml` `frontend` service builds from `./frontend-angular`
 - No CORS config on Spring Boot — same-origin via nginx
+
+### Frontend testing
+
+- `npm test` in `frontend-angular/` (Karma + Jasmine + ChromeHeadless, 96 specs)
+- `frontend-angular/karma.conf.js` adds a `ChromeHeadlessNoSandbox` launcher for CI (GitHub Actions runners need `--no-sandbox`)
 
 ### Design system — Style C (Hybrid Ops/Modern)
 
@@ -156,7 +163,7 @@ Dashboard (client component, useAssets hook)
 
 ## CI/CD
 
-GitHub Actions workflow (`.github/workflows/ci.yml`) triggers on push and PR to `main`. Runs `./mvnw clean verify -Dspring.profiles.active=dev` — H2 + MockMetricsCollector, zero external services needed. Badge at top of README.
+GitHub Actions workflow (`.github/workflows/ci.yml`) triggers on push and PR to `main`. Runs `./mvnw clean verify -Dspring.profiles.active=dev` — H2 + MockMetricsCollector, zero external services needed — then sets up Node 20, runs `npm ci`, `npm test -- --browsers=ChromeHeadlessNoSandbox` (Karma + Jasmine, 96 specs), and `npm run build` in `frontend-angular/` so a broken Angular build fails the pipeline before merge. Badge at top of README.
 
 Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 2 runs with JRE Alpine (~200MB final image). Layer caching via separated `pom.xml` copy + `dependency:resolve`.
 
@@ -210,13 +217,13 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 | 4.1 — Metrics Domain | ✅ Done | MetricSnapshot VO, MonitoringService, JPA layer, mock collector |
 | 4.2 — SSH Real | ✅ Done | SshMetricsCollector via SSHJ 0.40.0, Alpine containers in Docker Compose |
 | 4.3 — Scheduling + REST | ✅ Done | collectAllActive(), Virtual Threads, MetricsScheduler, MetricsRestController |
-| 5 — React Dashboard | ✅ Done | Next.js 15 + TypeScript dashboard with full CRUD from UI (modal create, inline edit, delete with confirmation), SWR polling and Recharts sparklines |
+| 5 — Angular Dashboard | ✅ Done | Angular 19 + TypeScript dashboard with full CRUD from UI (modal create, inline edit, delete with confirmation), RxJS polling and custom SVG sparklines |
 | 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build, full ecosystem containerized |
 | 6.5 — Flyway | ✅ Done | Schema versioning via Flyway 11; `schema.sql` replaced by `V1__initial_schema.sql`; `ddl-auto: validate` everywhere |
 | 7.1 — User persistence | ✅ Done | User domain (Username, EncodedPassword, UserRole), JPA + BCrypt, seed admin/viewer via Flyway V2/V3 |
 | 7.2 — JWT + login | ✅ Done | Login use case + `POST /api/v1/auth/login` returning a signed JWT (HS256, 1h) |
 | 7.3 — Security filter + roles | ✅ Done | Real `SecurityFilterChain`, JWT validation filter, role enforcement (ADMIN write / VIEWER read) |
-| 7.4 — Login UI + token storage | ⏳ Next | Frontend login page, token in React context |
+| 7.4 — Login UI + token storage | ⏳ Next | Angular login page and token storage service |
 | 7.5 — Protected routes + 401/403 | Pending | End-to-end auth flow from the browser |
 | 8 — Observability | ✅ Done | Spring Actuator, Micrometer metrics, structured logging with MDC |
 | 9 — Event Streaming | Pending | Apache Kafka pipeline for metrics + alerts (KRaft mode) |
@@ -410,34 +417,46 @@ DOCKER & NETWORKING
   When app runs on host, asset IP is `127.0.0.1`.
 
 FRONTEND
-• Next.js 15 static export (output: 'export') — no Node.js server in production.
-• nginx serves static files + reverse proxies /api/ to app:8080. Zero CORS config on Spring Boot.
-• SWR per-component pattern: each AssetCard owns its useSWR call for metrics.
-  Never call useSWR inside .map() or conditionals — Rules of Hooks violation.
-• API_BASE_URL = '' (empty string). Relative URLs work in dev (Next.js rewrites) and Docker (nginx).
-• next.config.ts has both `output: 'export'` and `rewrites` — generates harmless build warning. Ignore it.
-• Recharts does not support server components — all chart components must be in "use client" files.
-• Frontend Dockerfile: node:20-alpine build → nginx:alpine serve (~25MB final image).
-• Tailwind v4 uses CSS-first config (@import "tailwindcss" + @theme {} in globals.css).
-• React 19: `React.FormEvent` is deprecated. Use `React.SyntheticEvent<HTMLFormElement>` for
-  onSubmit handler types. VS Code flags the deprecated form correctly.
-• Edit panel state ownership: `isEditing` lives inside each AssetCard via useState. Do NOT
-  lift to Dashboard or track a global editingAssetId — each card's panel is fully independent.
-• Save-per-section, not Save-all: the backend exposes three separate endpoints for status, IP
-  and credentials. Each section in EditAssetPanel has its own Save button mapped 1:1. Do NOT
-  attempt a single "Save all" — implementing it would require three sequential calls with
-  partial failure handling, effectively a distributed transaction without atomicity guarantees.
-• Credentials UX: password is never returned by AssetResponse (security by construction), so
-  the password field in EditAssetPanel is always empty when the panel opens. Both username
-  and password are required for submission — there is no "username-only" path. If user wants
-  to change only username, they must re-enter the current password.
-• Mutations use useSWRConfig().mutate('/api/v1/assets') — exact key match required. SWR
-  deduplicates by string identity, so '/api/v1/assets/' (trailing slash) silently fails to
-  revalidate. Verify the key in hooks/useAssets.ts before calling mutate elsewhere.
+• Angular 19 SPA in frontend-angular/. Production build → static assets served by nginx
+  (no Node.js server in production). nginx reverse-proxies /api/ and /actuator/ to app:8080.
+  Zero CORS config on Spring Boot — same-origin via nginx.
+• frontend-angular/Dockerfile: node:20-alpine build → nginx:alpine serve. docker-compose
+  `frontend` service builds from ./frontend-angular.
+• Build output path: angular.json outputPath is "dist/frontend-angular"; the `application`
+  builder places the browser bundle under <outputPath>/browser/ → dist/frontend-angular/browser
+  (index.html lives there). The Dockerfile COPYs exactly that path to /usr/share/nginx/html.
+  Do NOT set outputPath to "dist/frontend-angular/browser" — that produces a double
+  browser/browser nesting and breaks the nginx document root.
+• karma.conf.js declares a ChromeHeadlessNoSandbox custom launcher (CI runners need --no-sandbox).
+  Local `npm test` uses ChromeHeadless; CI runs `npm test -- --browsers=ChromeHeadlessNoSandbox`.
+  The karma config MUST declare frameworks: ['jasmine','@angular-devkit/build-angular'] and the
+  plugins array — a minimal config with only customLaunchers breaks Karma with
+  "You need to include some adapter that implements __karma__.start method!".
+• State root: AssetService/MetricService (RxJS BehaviorSubjects/timers). No global store.
+  DashboardComponent owns editingAssetId (single-edit invariant) and a 60s interaction-safe
+  refresh suppressed while a modal/panel is open.
+• Per-asset metrics: each AssetCard owns its MetricService.history$(id) subscription in ngOnInit
+  (per-asset polling isolation). Signal required inputs are NOT readable in field initializers/
+  constructor (NG0950) — build FormControls/subscriptions in ngOnInit.
+• Relative /api URLs work in dev (proxy.conf.json) and Docker (nginx). No API_BASE_URL needed.
+• Save-per-section, not Save-all: backend exposes three separate endpoints for status, IP and
+  credentials. Each section in EditAssetPanel has its own Save button mapped 1:1. Do NOT attempt
+  a single "Save all" — three sequential calls with partial failure handling would be a
+  distributed transaction without atomicity guarantees.
+• Credentials UX: password is never returned by AssetResponse (security by construction), so the
+  password field in EditAssetPanel is always empty when the panel opens. Both username and
+  password are required for submission — no "username-only" path; to change only username the
+  user must re-enter the current password.
+• The legacy Next.js app under frontend/ was removed in PR4. Do not reintroduce it.
 
 CI/CD
 • GitHub Actions: .github/workflows/ci.yml. Temurin 21, Maven cache, chmod +x ./mvnw.
 • CI uses dev profile (H2 + mock). No Docker services in CI pipeline.
+• CI also runs the Angular pipeline after Maven: setup-node@v4 (Node 20, npm cache from
+  frontend-angular/package-lock.json), `npm ci`, `npm test -- --browsers=ChromeHeadlessNoSandbox`,
+  `npm run build` — all in frontend-angular/. A broken Angular build/test fails the pipeline.
+• CI runs the NoSandbox Chrome launcher because GitHub Actions ubuntu runners cannot use
+  Chrome's sandbox. The launcher is defined in frontend-angular/karma.conf.js.
 • Dummy INFRATRACK_ENCRYPTION_KEY env var set in CI to satisfy Spring placeholder resolution
   at startup (dev profile doesn't use encryption but base application.yml resolves the variable).
 • Node.js 20 deprecation warning in CI — deadline June 2026. Non-blocking.

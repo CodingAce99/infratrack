@@ -90,9 +90,9 @@ Chain strategy: stacked-to-main
 
 ## Phase 4: Docker, CI & Cleanup
 
-- [ ] 4.1 Update `Dockerfile`: Angular build → `dist/frontend/browser` → nginx
-- [ ] 4.2 Update `nginx.conf`: keep `/api/` proxy + SPA fallback
-- [ ] 4.3 Update `.github/workflows/ci.yml`: Node setup, Angular install/build/test
-- [ ] 4.4 Remove Next.js files: `app/`, `components/`, `hooks/`, `lib/`, configs
-- [ ] 4.5 Verify: `docker-compose up -d` serves Angular dashboard
-- [ ] 4.6 Verify: `ng test` passes with non-zero tests
+- [x] 4.1 Update `Dockerfile`: Angular build → `dist/frontend-angular/browser` → nginx
+- [x] 4.2 Update `nginx.conf`: keep `/api/` proxy + SPA fallback
+- [x] 4.3 Update `.github/workflows/ci.yml`: Node setup, Angular install/build/test
+- [x] 4.4 Remove Next.js files: `app/`, `components/`, `hooks/`, `lib/`, configs
+- [x] 4.5 Verify: `docker-compose up -d` serves Angular dashboard
+- [x] 4.6 Verify: `ng test` passes with non-zero tests
