@@ -218,16 +218,19 @@ Multi-stage `Dockerfile` at project root: Stage 1 builds with JDK Alpine, Stage 
 | 4.2 — SSH Real | ✅ Done | SshMetricsCollector via SSHJ 0.40.0, Alpine containers in Docker Compose |
 | 4.3 — Scheduling + REST | ✅ Done | collectAllActive(), Virtual Threads, MetricsScheduler, MetricsRestController |
 | 5 — Angular Dashboard | ✅ Done | Angular 19 + TypeScript dashboard with full CRUD from UI (modal create, inline edit, delete with confirmation), RxJS polling and custom SVG sparklines |
-| 6 — CI/CD | ✅ Done | GitHub Actions pipeline, multi-stage Docker build, full ecosystem containerized |
+| 6 — CI/CD + Docker Cutover | ✅ Done | GitHub Actions, Angular build/test pipeline, nginx frontend, full Docker Compose runtime |
 | 6.5 — Flyway | ✅ Done | Schema versioning via Flyway 11; `schema.sql` replaced by `V1__initial_schema.sql`; `ddl-auto: validate` everywhere |
-| 7.1 — User persistence | ✅ Done | User domain (Username, EncodedPassword, UserRole), JPA + BCrypt, seed admin/viewer via Flyway V2/V3 |
-| 7.2 — JWT + login | ✅ Done | Login use case + `POST /api/v1/auth/login` returning a signed JWT (HS256, 1h) |
-| 7.3 — Security filter + roles | ✅ Done | Real `SecurityFilterChain`, JWT validation filter, role enforcement (ADMIN write / VIEWER read) |
-| 7.4 — Login UI + token storage | ⏳ Next | Angular login page and token storage service |
-| 7.5 — Protected routes + 401/403 | Pending | End-to-end auth flow from the browser |
+| 7.1 — User persistence | ✅ Done | User domain, JPA persistence, BCrypt hashing, seeded demo users |
+| 7.2 — JWT + login API | ✅ Done | Login endpoint returning signed JWT access tokens |
+| 7.3 — Security filter + roles | ✅ Done | Stateless JWT validation and ADMIN/VIEWER authorization |
+| 7.4 — Login UI + token storage | ⏳ Next | Angular login page, token storage service, authenticated API calls |
+| 7.5 — Protected routes + 401/403 UX | Pending | Browser auth flow, route protection, unauthorized/forbidden states |
 | 8 — Observability | ✅ Done | Spring Actuator, Micrometer metrics, structured logging with MDC |
-| 9 — Event Streaming | Pending | Apache Kafka pipeline for metrics + alerts (KRaft mode) |
-| 10 — Frontend Polish | Pending | Animations, loading skeletons, responsive design, dark/light mode |
+| 9 — 1.0 Release Hardening | Pending | Demo data, README polish, smoke-test checklist, final Docker/CI validation |
+| 10 — Frontend Polish | Post-1.0 | Loading skeletons, responsive improvements, animations, dark/light mode |
+| Research — Event Streaming | Future / Separate Project Candidate | Evaluate whether Kafka belongs in Infratrack or deserves a dedicated Kafka-first project |
+
+Infratrack 1.0 focuses on a complete infrastructure inventory and monitoring workflow. Event streaming is intentionally deferred until there is a concrete product need; Kafka may fit better as a dedicated Kafka-first project rather than an add-on to this roadmap.
 
 ---
 
