@@ -1,56 +1,81 @@
-# Angular Dashboard Specification
+# Delta for Angular Dashboard
 
-## Purpose
-Angular SPA replacing the current dashboard while preserving asset CRUD, live metrics, sparklines, Docker delivery, and operational clarity. The backend REST API MUST remain unchanged.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Angular Shell and API Compatibility
-The system SHALL serve an Angular dashboard at `/`. It MUST use relative `/api` calls in development and production and MUST NOT require backend contract changes.
 
-#### Scenario: Dashboard opens
-- GIVEN the frontend is served
+The system SHALL render the real Angular dashboard at `/` for PR3. It MUST keep using the existing backend REST contract and relative `/api` calls. It MUST NOT require frontend login, JWT storage, route guards, Docker/CI cutover, Next.js removal, or unrelated Angular CLI analytics changes in this slice.
+(Previously: `/` only needed an Angular dashboard shell and broader migration compatibility.)
+
+#### Scenario: Dashboard opens with real content
+- GIVEN the Angular frontend is served
 - WHEN a user navigates to `/`
-- THEN the Angular dashboard renders with header and asset area
+- THEN the dashboard shows Header, asset area, and asset cards instead of the placeholder
 
 #### Scenario: Backend unavailable
 - GIVEN the API cannot be reached
 - WHEN the dashboard loads assets
 - THEN a user-visible error state is shown without crashing
 
-### Requirement: Shared Asset State and Mutations
-The system SHALL provide shared asset-list state with replayed latest data, 60-second refresh, and explicit revalidation after successful mutations. Failed mutations MUST propagate errors and preserve the last valid list.
+#### Scenario: Out-of-slice concerns stay absent
+- GIVEN PR3 is implemented
+- WHEN the dashboard is reviewed
+- THEN no login page, JWT interceptor, route guard, Docker/CI cutover, Next.js removal, or `cli.analytics` change is required
+
+### Requirement: Shared Asset State and Interaction-Safe Refresh
+
+The system SHALL provide shared asset-list state with replayed latest data. `Dashboard` SHALL own 60-second asset-list refresh. Refresh MUST NOT close an open create modal or edit panel and MUST NOT overwrite in-progress form input. The header connection indicator MUST mean the backend/API is responding now.
+(Previously: shared state required 60-second refresh but did not define interaction safety or connection-indicator semantics.)
 
 #### Scenario: Asset list is shared
 - GIVEN multiple dashboard consumers need assets
 - WHEN the asset list is loaded
 - THEN each consumer observes the same latest list
 
-#### Scenario: Mutation refreshes list
-- GIVEN an asset mutation succeeds
-- WHEN the mutation completes
-- THEN the asset list revalidates and emits updated data
+#### Scenario: Timed refresh preserves interaction
+- GIVEN a create modal or edit panel is open with in-progress input
+- WHEN the 60-second refresh interval elapses
+- THEN the interaction remains open and the in-progress input is unchanged
+
+#### Scenario: Connection indicator reflects current API reachability
+- GIVEN the dashboard checks the asset API
+- WHEN the latest check succeeds or fails
+- THEN the header shows connected only for the successful current response
+
+### Requirement: Dashboard CRUD Workflows
+
+The system MUST support create, status update, IP update, credentials update, and confirmed delete. Status, IP, and credentials saves SHALL remain separate actions. Successful create MUST close the modal, refresh the asset list, and show visible confirmation. Failed mutations MUST surface errors and preserve the last valid list.
+(Previously: create only needed to close the modal and show the new asset.)
+
+#### Scenario: Create asset succeeds
+- GIVEN valid name, type, IP, username, and password
+- WHEN the create form is submitted successfully
+- THEN the modal closes, the list refreshes, and a visible confirmation is shown
 
 #### Scenario: Duplicate IP is rejected
 - GIVEN asset creation returns duplicate-IP conflict
 - WHEN the form submits
-- THEN the error is exposed and the previous asset list remains visible
-
-### Requirement: Dashboard CRUD Workflows
-The system MUST support create, status update, IP update, credentials update, and confirmed delete. Status, IP, and credentials saves SHALL remain separate actions.
-
-#### Scenario: Create asset
-- GIVEN valid name, type, IP, username, and password
-- WHEN the create form is submitted
-- THEN the modal closes and the new asset appears
+- THEN a form-level error is shown and the previous asset list remains visible
 
 #### Scenario: Delete requires confirmation
 - GIVEN a delete action is requested
 - WHEN the user cancels confirmation
 - THEN the asset remains unchanged
 
+### Requirement: Single Edit Card Invariant
+
+The system MUST allow at most one asset card to be in editing mode at a time. Opening edit mode for another card MUST leave the previous card's edit mode before the new panel becomes active.
+(Previously: each card could own editing state without a dashboard-level invariant.)
+
+#### Scenario: Editing moves between cards
+- GIVEN one asset card is already editing
+- WHEN the user opens edit mode on another card
+- THEN only the newly selected card remains in editing mode
+
 ### Requirement: Per-Asset Metrics and Sparklines
-The system SHALL load each asset's metric history independently, poll every 60 seconds, show threshold colors, and render sparklines without an external charting dependency.
+
+The system SHALL load each asset's metric history independently, poll every 60 seconds, show threshold colors, and render sparklines without an external charting dependency. Empty history MUST render a stable empty state.
+(Previously: independent metrics and empty history were required without tying them to PR3 asset-card wiring.)
 
 #### Scenario: Metrics update independently
 - GIVEN two asset cards are visible
@@ -61,29 +86,3 @@ The system SHALL load each asset's metric history independently, poll every 60 s
 - GIVEN an asset has no metric snapshots
 - WHEN its sparkline renders
 - THEN a stable empty state is displayed
-
-### Requirement: Component Boundaries and Theme
-The system SHALL separate state-owning dashboard/form components from presentational input/output components. The default theme MUST be dark and use consistent status and metric visual states.
-
-#### Scenario: Presentational component renders from inputs
-- GIVEN a status badge receives `ACTIVE`
-- WHEN it renders
-- THEN it displays the active visual state without API access
-
-#### Scenario: Metric threshold color applies
-- GIVEN a metric value of 75%
-- WHEN the gauge renders
-- THEN the metric is shown with the amber threshold state
-
-### Requirement: Build, Docker, and Tests
-The system MUST build as an Angular production app, be served by nginx in Docker, reverse proxy `/api/`, and include a runnable non-zero frontend test suite.
-
-#### Scenario: Docker serves dashboard
-- GIVEN `docker-compose up -d` completes
-- WHEN `http://localhost:3000` is opened
-- THEN the Angular dashboard loads and API calls reach the backend
-
-#### Scenario: Frontend tests run
-- GIVEN CI executes frontend verification
-- WHEN the test command runs
-- THEN at least one Angular test executes successfully

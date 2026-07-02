@@ -1,16 +1,16 @@
 import { Routes } from '@angular/router';
 
+import { DashboardComponent } from './dashboard/dashboard.component';
+
 /**
- * Top-level routes. Phase 1 wires a lazy dashboard placeholder at `/`.
- * Subsequent slices replace the placeholder with the real DashboardComponent.
+ * Top-level routes. Phase 3 renders the real `DashboardComponent` (the
+ * operations dashboard composition root) directly at `/`. The placeholder is
+ * no longer referenced. Phase 4 owns Docker/CI cutover.
  */
 export const routes: Routes = [
   {
     path: '',
-    loadComponent: () =>
-      import('./dashboard/dashboard-placeholder.component').then(
-        (m) => m.DashboardPlaceholderComponent,
-      ),
+    component: DashboardComponent,
     title: 'Infratrack Dashboard',
   },
   { path: '**', redirectTo: '' },
