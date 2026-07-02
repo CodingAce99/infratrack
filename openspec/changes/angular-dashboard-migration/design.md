@@ -1,72 +1,77 @@
-# Design: Angular Dashboard Migration
+# Design: Angular Dashboard Migration — PR3 Smart Dashboard Architecture
 
 ## Technical Approach
 
-Replace the current `frontend/` Next.js static export with an Angular SPA using standalone components, RxJS services, and Reactive Forms. The backend API remains unchanged: Angular calls the existing `/api/v1/assets` and `/api/v1/assets/{id}/metrics/history?limit=20` endpoints through relative URLs. The design preserves the existing functional decomposition while making state ownership explicit in services and keeping presentational components API-free.
+PR3 replaces the Angular placeholder route with a real operations dashboard while reusing PR1 services/models and PR2 presentational components. `DashboardComponent` is the composition root: it owns the shared asset-list subscription, 60-second refresh cadence, modal visibility, confirmation messages, connection status, and the single-edit-card id. Child components stay narrowly scoped: header emits intent, create/edit forms call existing service methods, and asset cards compose metrics plus presentational UI.
 
 ## Architecture Decisions
 
 | Decision | Choice | Alternatives considered | Rationale |
 |---|---|---|---|
-| Angular structure | Standalone Angular app under `frontend/src/app` with feature folders for dashboard, assets, metrics, and shared UI | NgModules-first layout | Standalone is current Angular direction and keeps the portfolio signal modern without adding module boilerplate. |
-| Asset state | `AssetService` exposes `assets$`, `loading$`, `error$`, mutation methods, and `refresh()` backed by `BehaviorSubject`/`Subject`, `switchMap`, `shareReplay(1)` | Component-local fetching | Replaces SWR with one shared replayed source and explicit mutation revalidation. |
-| Metrics state | `MetricService.history$(assetId)` returns independent 60s polling streams per card | Single dashboard-wide metrics request | Existing UI isolates metrics per asset; per-card streams preserve fault isolation and avoid blocking unrelated cards. |
-| Sparkline | Custom SVG path component | `ngx-charts` or another chart library | Recharts is React-only; SVG keeps the dependency graph small for a simple 32px sparkline. |
-| Tests | Official Angular testing foundation with at least one service test and one presentational component test | Defer frontend tests or introduce third-party testing utilities in the first slice | The spec requires non-zero tests and CI confidence during the framework swap, and the first migration slice should minimize tooling risk by staying on Angular's standard testing stack. |
+| State root | Keep dashboard-level UI coordination in `DashboardComponent`; keep API state in `AssetService`/`MetricService` | Add a new global store | Existing PR1 services already expose replayed assets, mutation revalidation, and errors; a store would add review size and duplicate state. |
+| Single edit invariant | Dashboard owns `editingAssetId`; cards receive whether they are active and emit edit/close requests | Fully local card state | Local-only state cannot guarantee “one editing card” across siblings. A single id is explicit and cheap. |
+| Refresh safety | Dashboard runs the 60s asset-list timer but does not destroy modal/panel state or reset form-owned values | Put timer inside `AssetService` | PR1 intentionally kept service refresh explicit. Dashboard has the interaction context needed to avoid disrupting users. |
+| Connection indicator | Header displays “connected” only after the latest asset-list check succeeds; latest failure means disconnected | Derive from browser online status | The requirement is API/backend reachability now, not network availability. |
+| Future roles | Add input-ready affordance boundaries such as `canManage` defaults, but no auth service, JWT interceptor, guards, or role fetching | Implement real frontend auth now | Backend auth exists, but frontend auth is a later slice. PR3 should prepare UI seams without pulling auth scope forward. |
 
 ## Data Flow
 
 ```text
-DashboardComponent ── subscribes ──> AssetService.assets$
-       │                                │
-       │ create/edit/delete             ├── HttpClient ──> /api/v1/assets
-       │                                └── refresh$ + shareReplay(1)
-       └── AssetCardComponent ──> MetricService.history$(id)
-                                      └── timer(0, 60000) ──> /metrics/history?limit=20
+Route / ──→ DashboardComponent
+              │
+              ├─ subscribes assets$/loading$/error$ ──→ AssetService ──→ /api/v1/assets
+              ├─ passes count + connection ───────────→ HeaderComponent
+              ├─ opens create modal ──────────────────→ CreateAssetModalComponent
+              └─ renders cards + editingAssetId ──────→ AssetCardComponent × N
+                                                         ├─ MetricService.history$(id)
+                                                         └─ EditAssetPanelComponent
 ```
 
-Forms emit commands to services. Successful mutations call `AssetService.refresh()`. Failed mutations expose the API error and do not clear the last valid asset list.
+Refresh sequence:
+
+```text
+timer(60s) → DashboardComponent → AssetService.refresh()
+success → assets$ updates cards/header, connection=true
+failure → last asset list remains, connection=false, visible error
+open modal/panel → component instance remains mounted; form state is not rewritten
+```
+
+Successful create closes the modal, calls the existing `createAsset()` path, lets `AssetService` revalidate, and shows a dashboard-level confirmation. Failed mutations show form/section errors and preserve the previous list.
 
 ## File Changes
 
 | File | Action | Description |
 |------|--------|-------------|
-| `frontend/src/app/app.component.*` | Create | Angular shell for `/`. |
-| `frontend/src/app/dashboard/*` | Create | State-owning dashboard composition. |
-| `frontend/src/app/assets/*` | Create | Asset card, create modal, edit panel, status badge. |
-| `frontend/src/app/metrics/*` | Create | Metric gauge and custom SVG sparkline. |
-| `frontend/src/app/core/api/*.ts` | Create | Models, `ApiError`, `AssetService`, `MetricService`. |
-| `frontend/src/styles.css` | Create | Dark theme CSS variables and shared layout styles. |
-| `frontend/proxy.conf.json` | Create | Dev proxy from `/api` to Spring Boot. |
-| `frontend/Dockerfile` | Modify | Build Angular and copy `dist/frontend/browser` to nginx. |
-| `frontend/docker/nginx.conf` | Modify | Keep `/api/` proxy and SPA `try_files` fallback. |
-| `.github/workflows/ci.yml` | Modify | Add Node setup plus Angular install/build/test steps. |
-| `frontend/app`, `frontend/components`, `frontend/hooks`, `frontend/lib` | Delete | Remove Next.js/React implementation. |
+| `frontend-angular/src/app/dashboard/dashboard.component.ts` | Create | Composition root for assets, refresh, connection status, modal state, editing id, confirmation/error messages. |
+| `frontend-angular/src/app/dashboard/header.component.ts` | Create | Present asset count, API connection indicator, and add trigger. |
+| `frontend-angular/src/app/assets/create-asset-modal.component.ts` | Create | Reactive five-field create form using `ASSET_TYPES` and `AssetService.createAsset()`. |
+| `frontend-angular/src/app/assets/asset-card.component.ts` | Create | Card container using `StatusBadgeComponent`, `MetricGaugeComponent`, `SparklineComponent`, and `MetricService.history$(id)`. |
+| `frontend-angular/src/app/assets/edit-asset-panel.component.ts` | Create | Separate status/IP/credentials save sections and delete confirmation using `ConfirmDialogComponent`. |
+| `frontend-angular/src/app/app.routes.ts` | Modify | Bind `DashboardComponent` eagerly via `component` (replacing the `loadComponent` placeholder) at `/`. |
+| `frontend-angular/src/app/core/asset.service.ts` | Reuse | Keep existing `assets$`, `refresh()`, CRUD methods, and failure-preserves-list behavior. |
+| `frontend-angular/src/app/core/metric.service.ts` | Reuse | Keep per-asset polling streams and empty-history fallback. |
 
 ## Interfaces / Contracts
 
-```ts
-export interface Asset { id: string; name: string; type: 'SERVER' | 'ROUTER' | 'IOT_DEVICE'; ipAddress: string; status: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE'; username: string; }
-export interface MetricSnapshot { assetId: string; cpuUsage: number; memoryUsage: number; diskUsage: number; collectedAt: string; }
-```
-
-`AssetService` contract: `assets$`, `loading$`, `error$`, `refresh()`, `createAsset()`, `updateStatus()`, `updateIp()`, `updateCredentials()`, `deleteAsset()`. Status, IP, and credentials remain separate saves.
+- `HeaderComponent`: inputs `assetCount`, `isConnected`, optional `canManage`; output `addAsset`.
+- `CreateAssetModalComponent`: input `isOpen`; outputs `close`, `created(message)`; owns its `FormGroup` and API error display.
+- `AssetCardComponent`: inputs `asset`, `isEditing`, optional `canManage`; outputs `requestEdit`, `closeEdit`; owns only metrics subscription and visual card behavior.
+- `EditAssetPanelComponent`: input `asset`; outputs `updated`, `deleted`, `cancel`; owns independent form groups for status, IP, credentials.
+- `DashboardComponent`: owns `editingAssetId: string | null` and ensures opening one card clears the previous one.
 
 ## Testing Strategy
 
 | Layer | What to Test | Approach |
 |-------|-------------|----------|
-| Unit | `AssetService` refresh/error behavior; threshold color helper; SVG path generation | Angular `TestBed` plus official `HttpClient` testing utilities (`provideHttpClientTesting`, `HttpTestingController`) |
-| Component | `StatusBadge`, `MetricGauge`, empty sparkline state, form error rendering | Angular component tests with inputs and mocked services using the official Angular testing stack |
-| Integration | Docker/nginx API proxy and Angular production build | CI build plus manual `docker-compose up -d` verification |
-| E2E | Browser auth flow | Out of scope for this slice |
-
-This migration slice intentionally stays on Angular's official testing foundation. Third-party testing utilities are not excluded forever, but they are deferred until the Angular frontend is stable and there is a demonstrated need that the default Angular stack cannot satisfy cleanly.
+| Unit | 60s refresh, connection true/false, single-edit id transitions | Angular tests with mocked services and fake timers where useful. |
+| Component | 409 create error, success confirmation, empty metrics history, edit-panel section saves | Standalone component tests with mocked `AssetService`/`MetricService`. |
+| Integration | `/` renders dashboard instead of placeholder | Route/component test. |
+| E2E | Browser auth/roles | Out of scope. |
 
 ## Migration / Rollout
 
-No data migration required. Roll out on a feature branch by replacing `frontend/` in one bounded slice. Rollback is restoring the previous Next.js frontend and Dockerfile because backend and database are untouched.
+No data migration required. PR3 stays on `feat/angular-smart-dashboard` and does not touch Docker/CI cutover, Next.js removal, backend contracts, or `frontend-angular/angular.json` analytics.
 
 ## Open Questions
 
-- [ ] None blocking.
+- [ ] None.

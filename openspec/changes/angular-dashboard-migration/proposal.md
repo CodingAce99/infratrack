@@ -1,65 +1,73 @@
-# Proposal: Angular Dashboard Migration (First Parity Slice)
+# Proposal: Angular Dashboard Migration — PR3 Smart Dashboard Components
 
 ## Intent
-Replace the Next.js dashboard with an Angular SPA that preserves all functional value (asset CRUD, metrics polling, sparklines, edit flows) while establishing a clearly structured Angular architecture and a notable visual upgrade. Signals that the candidate can structure a serious frontend, not just use Angular syntax.
+PR3 turns the scaffold + presentational components shipped in PR1/PR2 into a usable monitoring/operations dashboard. Today `/` renders a placeholder and the API services are unused, so the migration delivers zero user value. PR3 wires `Dashboard`, `Header`, `AssetCard`, `CreateAssetModal`, and `EditAssetPanel` to `AssetService`/`MetricService`, adds the single-edit-card invariant, and makes the 60s refresh interaction-safe. After PR3 the dashboard is a credible ops surface; PR4 only does Docker/CI cutover and Next.js removal.
 
 ## Scope
 
 ### In Scope
-- Angular app skeleton (standalone components, routing at `/`, `proxy.conf.json`)
-- `AssetService` + `MetricService` (RxJS, `shareReplay`, imperative `refresh()`)
-- Full dashboard CRUD: `Dashboard`, `Header`, `AssetCard`, `CreateAssetModal`, `EditAssetPanel`, `ConfirmDialog`
-- `MetricGauge`, custom-SVG `Sparkline` (no charting library), `StatusBadge`
-- Dark-theme default design system (CSS custom properties, threshold color logic)
-- Updated `frontend/Dockerfile` (`dist/frontend/browser`) + nginx config
-- Frontend testing foundation using Angular's official testing stack for the first slice
+- `HeaderComponent`: asset count, API connection indicator, "+ Add Asset" trigger
+- `CreateAssetModalComponent`: `ReactiveFormsModule` 5-field form, submit→`AssetService`, 409/400 error display
+- `AssetCardComponent`: wires `MetricService.history$`, owns `isEditing`
+- `EditAssetPanelComponent`: separate status/IP/credentials saves + delete via `ConfirmDialog`
+- `DashboardComponent`: composition root, subscribes `assets$`, owns 60s list refresh that never disrupts in-progress interaction
+- Single-edit-card invariant (one card editing at a time)
+- Post-create affordance: close modal + revalidate list + visible confirmation
+- Route wiring: replace placeholder with real `DashboardComponent` at `/`
+- Tests: 409 duplicate IP, empty metrics history, single-edit invariant, connection indicator
 
 ### Out of Scope
-- Login page, JWT interceptor, route guards (Sprint 7.4–7.5)
-- Dark/light toggle, animations, advanced skeletons, responsive grid refinement
-- Backend changes; the Angular app consumes the existing REST API unchanged
+- Login page, JWT interceptor, route guards — Sprint 7.4–7.5 (structural placeholders only, no real frontend auth this PR)
+- Docker/CI cutover and Next.js removal (PR4)
+- Unrelated local change `frontend-angular/angular.json` (`cli.analytics=false`) — explicitly excluded
+- Backend or REST contract changes
 
 ## Capabilities
 
 ### New Capabilities
-- `angular-dashboard`: Angular SPA delivering asset inventory CRUD, live metrics polling, sparklines, and inline edit flows with smart/dumb component boundaries and RxJS service state.
+- None. PR3 implements against the existing `angular-dashboard` capability spec.
 
 ### Modified Capabilities
-- None. No spec-level backend behavior changes; the REST API contract is consumed as-is.
+- `angular-dashboard`: adds interaction-safety requirements (60s refresh must not close modal/panel or overwrite in-progress forms), single-edit-card invariant, header connection-indicator semantics (= API responding now), and post-create confirmation affordance.
 
 ## Approach
-Standalone Angular components with explicit smart (service-injecting) vs dumb (input/output-only) boundaries. `AssetService` owns the asset list stream + mutations + `refresh$` trigger; `MetricService` provides per-asset history observables. `ReactiveFormsModule` for forms. Custom SVG sparkline (~30 LOC). Dark theme via CSS custom properties. Dev proxy + nginx reverse proxy keep `API_BASE_URL` relative, unchanged from current model.
+Smart components inject services; dumb components (already shipped) take `@Input`/emit `@Output` only. `DashboardComponent` owns the 60s refresh timer plus an interaction-active gate that suppresses disruptive refresh during open modal/panel or dirty forms. `AssetCardComponent` coordinates a shared editing-id stream for the single-edit invariant. Per-card metrics streams stay isolated. Successful create: close modal → `AssetService.refresh()` → visible confirmation.
 
 ## Affected Areas
 
 | Area | Impact | Description |
 |------|--------|-------------|
-| `frontend/` | Removed | Next.js app replaced |
-| `frontend/` (Angular) | New | Services, components, models, styles, routing |
-| `frontend/Dockerfile` | Modified | Build/copy paths to `dist/frontend/browser` |
-| `frontend/proxy.conf.json` | New | Dev API proxy |
-| `.github/workflows/ci.yml` | Modified | Angular build/test steps |
+| `frontend-angular/src/app/dashboard/dashboard.*` | New | Composition root, interaction-safe 60s refresh |
+| `frontend-angular/src/app/dashboard/header.*` | New | Count, connection indicator, add trigger |
+| `frontend-angular/src/app/assets/asset-card.*` | New | Card shell, owns `isEditing`, wires `MetricService` |
+| `frontend-angular/src/app/assets/create-asset-modal.*` | New | Reactive form + submit |
+| `frontend-angular/src/app/assets/edit-asset-panel.*` | New | Status/IP/credentials saves + delete confirm |
+| `frontend-angular/src/app/app.routes.ts` | Modified | Render real `DashboardComponent` at `/` |
+| `frontend-angular/angular.json` | Unchanged | `cli.analytics=false` change is NOT PR3 |
 
 ## Risks
 
 | Risk | Likelihood | Mitigation |
 |------|------------|------------|
-| SWR→RxJS mental-model shift | Med | Service-encapsulated `refresh()`; documented contract |
-| Charting gap (Recharts→SVG) | Low | Custom SVG is ~30 LOC; no library |
-| Build path churn breaks Docker | Med | Update Dockerfile + CI in same slice |
-| No frontend testing precedent | Med | Establish minimal test setup in this slice |
+| Instance-template + behavioral logic exceeds 400-line budget | High | Slice PR3 into a chained sub-PR if forecast confirms; keep templates lean |
+| Single-edit invariant structurally couples cards via shared state | Med | One editing-id stream in `DashboardComponent`; cards observe/emit only |
+| 60s refresh disrupts open forms | Med | Interaction-active gate; suppress while modal/panel open or form dirty |
+| Route guard/auth affordances accidentally pulled in | Low | Explicit out-of-scope; placeholders only, no interceptor/guard |
 
 ## Rollback Plan
-Keep the Next.js `frontend/` on a branch; the Angular work lands on a feature branch. If the slice fails verification, abandon the Angular branch and restore the Next.js frontend + original Dockerfile/CI. No backend or DB changes to revert.
+PR3 lands on `feat/angular-smart-dashboard`. On verification failure, revert the PR without affecting PR1/PR2 already on `main`. Placeholder route remains the safe default until PR4 cutover. No backend/database changes to revert.
 
 ## Dependencies
-- Angular CLI, standalone components, RxJS, ReactiveFormsModule
+- PR1 services + PR2 presentational helpers
 - Existing Infratrack REST API (unchanged)
 
 ## Success Criteria
-- [ ] All current dashboard functional value present: list, create, edit (status/IP/credentials), delete, metrics polling, sparklines
-- [ ] Smart/dumb component boundaries enforced and documented
-- [ ] Custom SVG sparkline renders with no charting dependency
-- [ ] Dark-theme default ships with notable visual improvement over current
-- [ ] `docker-compose up -d` serves the Angular dashboard end-to-end
-- [ ] Frontend has a runnable test suite (non-zero)
+- [ ] `/` renders the real dashboard (no placeholder), Header, and asset cards
+- [ ] Create closes modal, revalidates list, shows visible confirmation
+- [ ] 409 duplicate IP shows form-level error, previous list preserved
+- [ ] Only one asset card editable at a time
+- [ ] 60s refresh never closes modal/panel or overwrites in-progress forms
+- [ ] Empty metrics history renders stable empty state
+- [ ] Header connection indicator reflects current API reachability
+- [ ] No real frontend auth/JWT/route guards introduced
+- [ ] `npm test` from `frontend-angular/` passes with the new PR3 tests
