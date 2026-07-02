@@ -62,7 +62,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./frontend-angular
       dockerfile: Dockerfile
     container_name: infratrack-frontend
     ports:

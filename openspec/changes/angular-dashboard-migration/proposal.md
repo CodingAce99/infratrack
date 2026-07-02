@@ -1,73 +1,67 @@
-# Proposal: Angular Dashboard Migration — PR3 Smart Dashboard Components
+# Proposal: Angular Dashboard Migration — PR4 Docker/CI Cutover & Next.js Removal
 
 ## Intent
-PR3 turns the scaffold + presentational components shipped in PR1/PR2 into a usable monitoring/operations dashboard. Today `/` renders a placeholder and the API services are unused, so the migration delivers zero user value. PR3 wires `Dashboard`, `Header`, `AssetCard`, `CreateAssetModal`, and `EditAssetPanel` to `AssetService`/`MetricService`, adds the single-edit-card invariant, and makes the 60s refresh interaction-safe. After PR3 the dashboard is a credible ops surface; PR4 only does Docker/CI cutover and Next.js removal.
+PR1–PR3 shipped the Angular dashboard (`frontend-angular/`) — scaffold, services, presentational components, and the smart dashboard wired to the REST API. The dashboard works locally via `ng serve` + `proxy.conf.json`, but the production build path still serves the legacy Next.js app: the root `Dockerfile` is Java-only, `docker-compose.yml` `frontend` service builds `./frontend` (Next.js), and CI runs only the Maven pipeline. PR4 cuts over Docker and CI to Angular and removes the now-dead Next.js codebase so the repo has a single frontend and one consistent build/test path.
 
 ## Scope
 
 ### In Scope
-- `HeaderComponent`: asset count, API connection indicator, "+ Add Asset" trigger
-- `CreateAssetModalComponent`: `ReactiveFormsModule` 5-field form, submit→`AssetService`, 409/400 error display
-- `AssetCardComponent`: wires `MetricService.history$`, owns `isEditing`
-- `EditAssetPanelComponent`: separate status/IP/credentials saves + delete via `ConfirmDialog`
-- `DashboardComponent`: composition root, subscribes `assets$`, owns 60s list refresh that never disrupts in-progress interaction
-- Single-edit-card invariant (one card editing at a time)
-- Post-create affordance: close modal + revalidate list + visible confirmation
-- Route wiring: replace placeholder with real `DashboardComponent` at `/`
-- Tests: 409 duplicate IP, empty metrics history, single-edit invariant, connection indicator
+- Root `Dockerfile`: multi-stage build that produces the Angular static assets (`dist/frontend-angular/browser`) and serves them via nginx, alongside the existing Java app build
+- `nginx.conf`: serve Angular static files at `/` and reverse-proxy `/api/` to the app container (same-origin, no CORS), with SPA fallback to `index.html`
+- `docker-compose.yml`: repoint the `frontend` service build context to `frontend-angular/` and the new Dockerfile/nginx setup
+- `.github/workflows/ci.yml`: add Node 20 setup, `npm ci` in `frontend-angular/`, run `ng test --watch=false --browsers=ChromeHeadless`, and `ng build` so the Angular pipeline is exercised on every push/PR
+- Remove legacy Next.js files: `frontend/` directory (`app/`, `components/`, `hooks/`, `lib/`, `public/`, configs, `Dockerfile`, `package*.json`)
 
 ### Out of Scope
-- Login page, JWT interceptor, route guards — Sprint 7.4–7.5 (structural placeholders only, no real frontend auth this PR)
-- Docker/CI cutover and Next.js removal (PR4)
-- Unrelated local change `frontend-angular/angular.json` (`cli.analytics=false`) — explicitly excluded
+- Any Angular component/service/dashboard logic change (locked by PR1–PR3)
 - Backend or REST contract changes
+- Frontend auth (login page, JWT interceptor, route guards) — Sprint 7.4–7.5
+- Lighthouse/perf budgets, dark/light toggle, animations — Phase 10 polish
+- Re-enabling ESLint for Angular (no prior ESLint config exists; deferred)
 
 ## Capabilities
 
 ### New Capabilities
-- None. PR3 implements against the existing `angular-dashboard` capability spec.
+- None. PR4 implements against the existing `angular-dashboard` capability spec.
 
 ### Modified Capabilities
-- `angular-dashboard`: adds interaction-safety requirements (60s refresh must not close modal/panel or overwrite in-progress forms), single-edit-card invariant, header connection-indicator semantics (= API responding now), and post-create confirmation affordance.
+- `angular-dashboard`: adds the deployment/runtime capability — the dashboard MUST be buildable to static assets, served by nginx behind the same origin as the API, and verifiable via `docker-compose up -d`. No behavioral change to the running app.
 
 ## Approach
-Smart components inject services; dumb components (already shipped) take `@Input`/emit `@Output` only. `DashboardComponent` owns the 60s refresh timer plus an interaction-active gate that suppresses disruptive refresh during open modal/panel or dirty forms. `AssetCardComponent` coordinates a shared editing-id stream for the single-edit invariant. Per-card metrics streams stay isolated. Successful create: close modal → `AssetService.refresh()` → visible confirmation.
+Single multi-stage Dockerfile at repo root builds the JAR (existing stage) and the Angular bundle (new stage), then assembles a runtime image with nginx serving `dist/frontend-angular/browser` and proxying `/api/` to `localhost:8080`. `docker-compose` keeps the four-service topology (postgres, ssh-target-1, app, frontend) but `frontend` now builds from `frontend-angular/`. CI gains a Node job (or step) that installs deps and runs `ng test` + `ng build` so a broken Angular build fails the pipeline before merge. Next.js removal is a pure deletion once the Angular build path is green; nothing imports `frontend/`.
 
 ## Affected Areas
 
 | Area | Impact | Description |
 |------|--------|-------------|
-| `frontend-angular/src/app/dashboard/dashboard.*` | New | Composition root, interaction-safe 60s refresh |
-| `frontend-angular/src/app/dashboard/header.*` | New | Count, connection indicator, add trigger |
-| `frontend-angular/src/app/assets/asset-card.*` | New | Card shell, owns `isEditing`, wires `MetricService` |
-| `frontend-angular/src/app/assets/create-asset-modal.*` | New | Reactive form + submit |
-| `frontend-angular/src/app/assets/edit-asset-panel.*` | New | Status/IP/credentials saves + delete confirm |
-| `frontend-angular/src/app/app.routes.ts` | Modified | Render real `DashboardComponent` at `/` |
-| `frontend-angular/angular.json` | Unchanged | `cli.analytics=false` change is NOT PR3 |
+| `Dockerfile` | Modified | Add Angular build stage + nginx runtime |
+| `nginx.conf` (new or in `frontend-angular/`) | New | Static serve + `/api/` proxy + SPA fallback |
+| `docker-compose.yml` | Modified | `frontend` service context → `frontend-angular/` |
+| `.github/workflows/ci.yml` | Modified | Node 20 setup, `npm ci`, `ng test`, `ng build` |
+| `frontend/` | Removed | Legacy Next.js app, superseded by `frontend-angular/` |
+| `frontend-angular/` | Unchanged (source) | No code changes; only consumed by new build path |
 
 ## Risks
 
 | Risk | Likelihood | Mitigation |
 |------|------------|------------|
-| Instance-template + behavioral logic exceeds 400-line budget | High | Slice PR3 into a chained sub-PR if forecast confirms; keep templates lean |
-| Single-edit invariant structurally couples cards via shared state | Med | One editing-id stream in `DashboardComponent`; cards observe/emit only |
-| 60s refresh disrupts open forms | Med | Interaction-active gate; suppress while modal/panel open or form dirty |
-| Route guard/auth affordances accidentally pulled in | Low | Explicit out-of-scope; placeholders only, no interceptor/guard |
+| nginx SPA fallback misroutes deep links | Med | `try_files $uri $uri/ /index.html` + verify `/api/` stays proxied, not rewritten |
+| CI Angular test needs ChromeHeadless + sandbox flags in runner | Med | Use `--watch=false --browsers=ChromeHeadless --no-sandbox` if runner requires it |
+| Removing `frontend/` breaks a stray reference (docs, scripts) | Low | Grep repo for `frontend/` paths before deletion; update only references, not code |
+| Docker build context size / node_modules leakage | Low | Use `.dockerignore` in `frontend-angular/` to exclude `node_modules`, `dist`, `.angular` |
 
 ## Rollback Plan
-PR3 lands on `feat/angular-smart-dashboard`. On verification failure, revert the PR without affecting PR1/PR2 already on `main`. Placeholder route remains the safe default until PR4 cutover. No backend/database changes to revert.
+PR4 lands on `feat/angular-docker-cutover`. On verification failure, revert the PR — PR1–PR3 Angular source remains intact on `main`, and `ng serve` continues to work locally. The Next.js `frontend/` removal is the only non-reversible step; if it lands before the Angular docker path is verified, restore `frontend/` from git history. No backend/database changes to revert.
 
 ## Dependencies
-- PR1 services + PR2 presentational helpers
+- PR1–PR3 merged on `main` (Angular dashboard functional)
 - Existing Infratrack REST API (unchanged)
+- `frontend-angular/` `npm test` already green locally (PR3 shipped passing specs)
 
 ## Success Criteria
-- [ ] `/` renders the real dashboard (no placeholder), Header, and asset cards
-- [ ] Create closes modal, revalidates list, shows visible confirmation
-- [ ] 409 duplicate IP shows form-level error, previous list preserved
-- [ ] Only one asset card editable at a time
-- [ ] 60s refresh never closes modal/panel or overwrites in-progress forms
-- [ ] Empty metrics history renders stable empty state
-- [ ] Header connection indicator reflects current API reachability
-- [ ] No real frontend auth/JWT/route guards introduced
-- [ ] `npm test` from `frontend-angular/` passes with the new PR3 tests
+- [ ] `docker-compose up -d` serves the Angular dashboard at `http://localhost:3000`
+- [ ] `/api/` requests from the browser reach the app container (same-origin, no CORS)
+- [ ] Deep-link/SPA refresh returns `index.html`, not 404
+- [ ] CI pipeline runs `ng test` (ChromeHeadless) and `ng build`; failure blocks merge
+- [ ] `frontend/` (Next.js) directory and its references are removed
+- [ ] No behavioral regression in the running dashboard vs PR3
