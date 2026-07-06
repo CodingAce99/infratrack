@@ -12,7 +12,7 @@ import { authInterceptor } from './core/auth.interceptor';
  * so it is intentionally omitted here to keep production providers test-free.
  *
  * `authInterceptor` is registered globally so every `/api/*` request carries
- * the Bearer token and protegected-request 401s clear the session. The
+ * the Bearer token and protected-request 401s clear the session. The
  * interceptor itself decides whether to attach a header (only `/api/*` and
  * only when a token exists), so dev-profile (no token) stays auth-free.
  */

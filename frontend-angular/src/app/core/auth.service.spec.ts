@@ -217,3 +217,84 @@ describe('AuthService session restore from localStorage', () => {
     expect(authed).toBe(false);
   });
 });
+
+describe('decodeAuthUser expired JWT restore behavior', () => {
+  const futureExp = Math.floor(Date.now() / 1000) + 3600;
+  const pastExp = Math.floor(Date.now() / 1000) - 3600;
+
+  it('rejects a token whose exp claim is in the past (expired)', () => {
+    const token = fakeJwt({ sub: 'admin', role: 'ADMIN', exp: pastExp });
+    expect(decodeAuthUser(token)).toBeNull();
+  });
+
+  it('rejects a token whose exp claim equals the current time (already elapsed)', () => {
+    const now = Math.floor(Date.now() / 1000);
+    const token = fakeJwt({ sub: 'admin', role: 'ADMIN', exp: now });
+    expect(decodeAuthUser(token)).toBeNull();
+  });
+
+  it('rejects a token whose exp claim is not a finite number', () => {
+    const malformed: [string, unknown][] = [
+      ['non-numeric string', 'next-week'],
+      ['boolean true', true],
+      ['null', null],
+      ['object', { value: 1 }],
+      ['NaN string', 'NaN'],
+      ['Infinity string', 'Infinity'],
+    ];
+    for (const [label, value] of malformed) {
+      const token = fakeJwt({ sub: 'admin', role: 'ADMIN', exp: value });
+      expect(decodeAuthUser(token)).toBeNull(
+        `expected expired-looking exp (${label}) to be rejected`,
+      );
+    }
+  });
+
+  it('accepts a valid token whose exp claim is a future numeric timestamp', () => {
+    const token = fakeJwt({ sub: 'admin', role: 'ADMIN', exp: futureExp });
+    expect(decodeAuthUser(token)).toEqual({
+      username: 'admin',
+      role: 'ADMIN',
+    } as AuthUser);
+  });
+
+  it('accepts a valid token whose exp claim is a numeric string in seconds', () => {
+    const token = fakeJwt({
+      sub: 'admin',
+      role: 'ADMIN',
+      exp: String(futureExp),
+    });
+    expect(decodeAuthUser(token)).toEqual({
+      username: 'admin',
+      role: 'ADMIN',
+    } as AuthUser);
+  });
+});
+
+describe('AuthService expired token restore', () => {
+  afterEach(() => localStorage.clear());
+
+  it('restores as unauthenticated and drops the stored token when localStorage holds an expired JWT', async () => {
+    const expiredToken = fakeJwt({
+      sub: 'admin',
+      role: 'ADMIN',
+      exp: Math.floor(Date.now() / 1000) - 60,
+    });
+    localStorage.setItem(AUTH_TOKEN_KEY, expiredToken);
+
+    TestBed.configureTestingModule({
+      providers: [AuthService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const fresh = TestBed.inject(AuthService);
+
+    const user = await firstValueFrom(fresh.user$);
+    const role = await firstValueFrom(fresh.role$);
+    const authed = await firstValueFrom(fresh.isAuthenticated$);
+
+    expect(user).toBeNull();
+    expect(role).toBeNull();
+    expect(authed).toBe(false);
+    expect(fresh.getToken()).toBeNull();
+    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
+  });
+});

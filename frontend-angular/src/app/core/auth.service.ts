@@ -24,8 +24,16 @@ const VALID_ROLES: readonly UserRole[] = ['ADMIN', 'VIEWER'];
  *
  * The frontend uses the decoded claims ONLY to restore UI state after a
  * page reload; the backend still validates every API request. Null/empty,
- * malformed, unparseable, missing-`sub`, or unknown-`role` tokens resolve
- * to `null` so callers can treat the result as "no usable local session".
+ * malformed, unparseable, missing-`sub`, unknown-`role`, or expired-looking
+ * tokens resolve to `null` so callers can treat the result as "no usable
+ * local session".
+ *
+ * Expiry handling: when an `exp` claim is present it MUST be a finite number
+ * of seconds since the Unix epoch that lies strictly in the future; otherwise
+ * the token is treated as expired/invalid and `null` is returned. A missing
+ * `exp` claim does not by itself invalidate the token (login response tokens
+ * are not re-decoded here; missing-exp restore is allowed to preserve the
+ * lenient MVP contract while clearly expired tokens are never trusted).
  */
 export function decodeAuthUser(token: string | null): AuthUser | null {
   if (!token) {
@@ -51,6 +59,7 @@ export function decodeAuthUser(token: string | null): AuthUser | null {
   const record = payload as Record<string, unknown>;
   const sub = record['sub'];
   const role = record['role'];
+  const exp = record['exp'];
 
   if (typeof sub !== 'string' || sub.length === 0) {
     return null;
@@ -58,8 +67,34 @@ export function decodeAuthUser(token: string | null): AuthUser | null {
   if (typeof role !== 'string' || !VALID_ROLES.includes(role as UserRole)) {
     return null;
   }
+  if (exp !== undefined && !isFutureUnixSeconds(exp)) {
+    return null;
+  }
 
   return { username: sub, role: role as UserRole };
+}
+
+/**
+ * Returns `true` only when `exp` is a finite numeric value expressed in
+ * whole seconds since the Unix epoch that lies strictly in the future.
+ * Accepts numbers and numeric strings; rejects anything else, anything that
+ * cannot represent a valid expiry timestamp, and any value that has already
+ * elapsed (inclusive of the exact expiry instant).
+ */
+function isFutureUnixSeconds(exp: unknown): boolean {
+  const seconds =
+    typeof exp === 'number'
+      ? exp
+      : typeof exp === 'string' && exp.trim() !== ''
+        ? Number(exp)
+        : NaN;
+  if (!Number.isFinite(seconds)) {
+    return false;
+  }
+  // Use seconds resolution: compare against the current wall-clock time so
+  // an `exp` exactly equal to "now" is already expired (JWT exp is "not on
+  // or after", i.e. valid only while strictly greater than the issued time).
+  return seconds > Math.floor(Date.now() / 1000);
 }
 
 /**

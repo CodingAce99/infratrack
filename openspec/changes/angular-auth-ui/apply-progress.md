@@ -130,6 +130,39 @@ at its prior 173-passing baseline.
   per-PR guideline because TDD spec lines dominate. Flagged for the
   maintainer; the chain exists to keep the OVERALL review across PRs sane.
 
+## Gate Review Corrections (follow-up commit on `feature/angular-auth-ui-auth-core`)
+
+A fresh gate review of PR 1 surfaced a WARNING: `decodeAuthUser()` validated
+`sub` and `role` but not `exp`, conflicting with `design.md` line 57
+("Invalid, missing, malformed, or expired-looking tokens are treated as no
+session locally"). Corrective work was applied as one work-unit commit:
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `frontend-angular/src/app/core/auth.service.ts` | Modified | Added `exp` claim validation: when `exp` is present it MUST be a finite numeric Unix-seconds value strictly in the future; non-numeric or elapsed `exp` returns `null` (no session) via a new pure `isFutureUnixSeconds` helper. Missing `exp` stays lenient (per existing test intent and the login response not being re-decoded here). |
+| `frontend-angular/src/app/core/auth.service.spec.ts` | Modified | Added two new `describe` blocks (6 specs total): pure `decodeAuthUser` expired/non-numeric `exp` rejection + future `exp` acceptance (numeric and numeric-string), and `AuthService` restore-from-expired-JWT → unauthenticated + stored token dropped. |
+| `frontend-angular/src/app/app.config.ts` | Modified | Fixed typo in interceptor registration comment: `protegected-request` → `protected-request`. No behavior change. |
+
+### Decision: missing `exp` stays lenient
+
+The design statement "missing, malformed, or expired-looking tokens are
+treated as no session" groups missing tokens / missing critical claims together,
+but the existing `fakeJwt` test helper (and the backend login response path,
+which uses `res.username`/`res.role` directly and never passes through
+`decodeAuthUser`) omit `exp`. Treating a missing `exp` as invalid would silently
+break those existing patterns without a corresponding restore-flow risk. Per the
+corrective instruction ("Missing `exp` may be treated according to the existing
+design/test intent, but avoid trusting clearly expired tokens"), a *present*
+`exp` is strictly enforced (numeric + strictly future); an *absent* `exp` is
+left to existing behavior. Clearly expired tokens are never trusted.
+
+### Corrective Test Execution
+
+```
+npm test -- --include=src/app/core/auth.service.spec.ts  # 20/20 SUCCESS (was 14; +6)
+npm test                                                 # 126/126 SUCCESS (was 120; no regressions)
+```
+
 ## Status
 
 6/15 tasks complete. Ready for the next chain element (PR 2 — Login UI +
