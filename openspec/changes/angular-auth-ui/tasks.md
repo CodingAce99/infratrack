@@ -25,15 +25,15 @@ Chain strategy: pending
 
 ## Phase 1: Foundation — Models & AuthService
 
-- [ ] 1.1 Add `LoginRequest`, `LoginResponse`, `AuthUser` types to `core/models.ts` (reuses existing `UserRole`)
-- [ ] 1.2 Create `core/auth.service.ts`: login/logout, localStorage token, claim decode, `user$`/`role$`/`isAuthenticated$`
-- [ ] 1.3 Write `core/auth.service.spec.ts`: mock login, logout clears, localStorage persistence, state restore, invalid token rejection
+- [x] 1.1 Add `LoginRequest`, `LoginResponse`, `AuthUser` types to `core/models.ts` (reuses existing `UserRole`)
+- [x] 1.2 Create `core/auth.service.ts`: login/logout, localStorage token, claim decode, `user$`/`role$`/`isAuthenticated$`
+- [x] 1.3 Write `core/auth.service.spec.ts`: mock login, logout clears, localStorage persistence, state restore, invalid token rejection
 
 ## Phase 2: HTTP Interceptor
 
-- [ ] 2.1 Create `core/auth.interceptor.ts`: Bearer header for `/api/*`; 401 clears session only; 403 preserves state
-- [ ] 2.2 Write `core/auth.interceptor.spec.ts`: header injection, no-header without token, 401 clears, 403 preserves
-- [ ] 2.3 Register interceptor in `app.config.ts` via `withInterceptors([authInterceptor])`
+- [x] 2.1 Create `core/auth.interceptor.ts`: Bearer header for `/api/*`; 401 clears session only; 403 preserves state
+- [x] 2.2 Write `core/auth.interceptor.spec.ts`: header injection, no-header without token, 401 clears, 403 preserves
+- [x] 2.3 Register interceptor in `app.config.ts` via `withInterceptors([authInterceptor])`
 
 ## Phase 3: Route Guard
 
