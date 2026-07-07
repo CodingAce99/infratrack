@@ -9,6 +9,7 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
+import { Router } from '@angular/router';
 
 import { authInterceptor } from './auth.interceptor';
 import { AuthService } from './auth.service';
@@ -18,30 +19,35 @@ import { AuthService } from './auth.service';
  *  - Bearer header injection on `/api/*` requests when a token exists.
  *  - No header when no token exists.
  *  - No header for non-`/api/*` requests (token never leaks off-origin).
- *  - 401 from a protected `/api/*` request clears the session via logout().
+ *  - 401 from a protected `/api/*` request clears the session via logout() and
+ *    redirects to `/login`.
  *  - 401 from the login request itself does NOT clear state (form-level error).
  *  - 403 does NOT clear the session (authorization failure, not auth failure).
  *
- * PR 1 constraint: the interceptor MUST NOT redirect to `/login` here. The
- * `/login` route does not exist yet (added in PR 2); redirect lives in PR 2's
- * task 5.3. These tests therefore assert only session-clearing behavior.
+ * The login 401 special case preserves the inline form error path: bad
+ * credentials stay on `/login`, while protected API 401 invalidates the local
+ * session and sends the user back to the public login route.
  */
 describe('authInterceptor', () => {
   let http: HttpClient;
   let httpMock: HttpTestingController;
   let authSpy: jasmine.SpyObj<AuthService>;
+  let routerSpy: jasmine.SpyObj<Router>;
 
   beforeEach(() => {
     authSpy = jasmine.createSpyObj<AuthService>('AuthService', [
       'getToken',
       'logout',
     ]);
+    routerSpy = jasmine.createSpyObj<Router>('Router', ['navigateByUrl']);
+    routerSpy.navigateByUrl.and.resolveTo(true);
 
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptors([authInterceptor])),
         provideHttpClientTesting(),
         { provide: AuthService, useValue: authSpy },
+        { provide: Router, useValue: routerSpy },
       ],
     });
 
@@ -94,7 +100,7 @@ describe('authInterceptor', () => {
     req.flush([]);
   });
 
-  it('clears the session (logout) when a protected /api/* request returns 401', () => {
+  it('clears the session and redirects to /login when a protected /api/* request returns 401', () => {
     authSpy.getToken.and.returnValue('jwt-123');
 
     http.get('/api/v1/assets').subscribe({
@@ -106,6 +112,7 @@ describe('authInterceptor', () => {
     req.flush({ error: 'Unauthorized' }, { status: 401, statusText: 'Unauthorized' });
 
     expect(authSpy.logout).toHaveBeenCalledTimes(1);
+    expect(routerSpy.navigateByUrl).toHaveBeenCalledOnceWith('/login');
   });
 
   it('does NOT clear the session when the login request itself returns 401', () => {
@@ -125,6 +132,7 @@ describe('authInterceptor', () => {
     );
 
     expect(authSpy.logout).not.toHaveBeenCalled();
+    expect(routerSpy.navigateByUrl).not.toHaveBeenCalled();
   });
 
   it('does NOT clear the session and surfaces the error when a protected request returns 403', () => {
@@ -139,5 +147,6 @@ describe('authInterceptor', () => {
     req.flush({ error: 'Forbidden' }, { status: 403, statusText: 'Forbidden' });
 
     expect(authSpy.logout).not.toHaveBeenCalled();
+    expect(routerSpy.navigateByUrl).not.toHaveBeenCalled();
   });
 });
