@@ -6,16 +6,30 @@ import { By } from '@angular/platform-browser';
 import { routes } from './app.routes';
 import { provideRouter } from '@angular/router';
 import { AssetService } from './core/asset.service';
-import { of, Subject } from 'rxjs';
+import { BehaviorSubject, of, Subject } from 'rxjs';
 import { ApiError } from './core/api-error';
 import { MetricService } from './core/metric.service';
+import { AuthService } from './core/auth.service';
 
 describe('app.routes', () => {
-  async function setup() {
+  async function setup(isAuthenticated = true) {
     const err$ = new Subject<ApiError>();
+    const authenticated$ = new BehaviorSubject<boolean>(isAuthenticated);
+    const user$ = new BehaviorSubject(
+      isAuthenticated ? { username: 'admin', role: 'ADMIN' as const } : null,
+    );
     await TestBed.configureTestingModule({
       providers: [
         provideRouter(routes),
+        {
+          provide: AuthService,
+          useValue: {
+            isAuthenticated$: authenticated$.asObservable(),
+            user$: user$.asObservable(),
+            login: jasmine.createSpy('login'),
+            logout: jasmine.createSpy('logout'),
+          },
+        },
         {
           provide: AssetService,
           useValue: {
@@ -37,15 +51,39 @@ describe('app.routes', () => {
       ],
     }).compileComponents();
     const harness = await RouterTestingHarness.create();
-    await harness.navigateByUrl('/');
-    return harness;
+    const router = TestBed.inject(Router);
+    return { harness, router };
   }
 
-  it('renders the real DashboardComponent at "/" (not the placeholder)', async () => {
-    const harness = await setup();
+  it('renders the real DashboardComponent at "/" for an authenticated session', async () => {
+    const { harness } = await setup(true);
+    await harness.navigateByUrl('/');
+
     const dashboard = harness.fixture.debugElement.query(
       By.css('[data-testid="dashboard-header"]'),
     );
     expect(dashboard).not.toBeNull();
+  });
+
+  it('redirects unauthenticated dashboard navigation to /login', async () => {
+    const { harness, router } = await setup(false);
+
+    await harness.navigateByUrl('/');
+
+    expect(router.url).toBe('/login');
+    expect(
+      harness.fixture.debugElement.query(By.css('[data-testid="login-form"]')),
+    ).not.toBeNull();
+  });
+
+  it('allows direct navigation to the public login route', async () => {
+    const { harness, router } = await setup(false);
+
+    await harness.navigateByUrl('/login');
+
+    expect(router.url).toBe('/login');
+    expect(
+      harness.fixture.debugElement.query(By.css('[data-testid="login-form"]')),
+    ).not.toBeNull();
   });
 });

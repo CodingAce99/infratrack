@@ -1,19 +1,25 @@
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { of, Subject } from 'rxjs';
+import { Router } from '@angular/router';
+import { BehaviorSubject, of, Subject } from 'rxjs';
 
-import { DashboardComponent } from './dashboard.component';
+import { canManageAssets, DashboardComponent } from './dashboard.component';
+import { AuthService } from '../core/auth.service';
 import { AssetService } from '../core/asset.service';
 import { ApiError } from '../core/api-error';
+import { AuthUser } from '../core/models';
 import { Asset, AssetServiceMock } from '../testing/asset-service.mock';
 import { MetricService } from '../core/metric.service';
 import { MetricServiceMock } from '../testing/metric-service.mock';
 
 describe('DashboardComponent', () => {
   let assetService: AssetServiceMock;
+  let authService: { logout: jasmine.Spy };
+  let router: { navigateByUrl: jasmine.Spy };
   let metricService: MetricServiceMock;
   let assetsSubject: Subject<Asset[]>;
   let errorSubject: Subject<ApiError>;
+  let userSubject: BehaviorSubject<AuthUser | null>;
 
   function setup() {
     const fixture = TestBed.createComponent(DashboardComponent);
@@ -24,12 +30,30 @@ describe('DashboardComponent', () => {
   beforeEach(async () => {
     assetsSubject = new Subject<Asset[]>();
     errorSubject = new Subject<ApiError>();
+    userSubject = new BehaviorSubject<AuthUser | null>({
+      username: 'admin',
+      role: 'ADMIN',
+    });
+    authService = {
+      logout: jasmine.createSpy('logout'),
+    };
+    router = {
+      navigateByUrl: jasmine.createSpy('navigateByUrl'),
+    };
 
     await TestBed.configureTestingModule({
       imports: [DashboardComponent],
       providers: [
         { provide: AssetService, useClass: AssetServiceMock },
         { provide: MetricService, useClass: MetricServiceMock },
+        {
+          provide: AuthService,
+          useValue: {
+            user$: userSubject.asObservable(),
+            logout: authService.logout,
+          },
+        },
+        { provide: Router, useValue: router },
       ],
     }).compileComponents();
 
@@ -304,6 +328,85 @@ describe('DashboardComponent', () => {
       By.css('[data-testid="connection-indicator"]'),
     );
     expect(dot.nativeElement.getAttribute('data-connected')).toBe('true');
+  });
+
+  it('passes the authenticated username to the header', () => {
+    const fixture = setup();
+    emitAssets([]);
+    fixture.detectChanges();
+
+    const currentUser = fixture.debugElement.query(By.css('[data-testid="current-user"]'));
+
+    expect(currentUser).not.toBeNull();
+    expect(currentUser.nativeElement.textContent).toContain('admin');
+  });
+
+  it('allows ADMIN users to access management affordances', () => {
+    const fixture = setup();
+    emitAssets([
+      {
+        id: 'a-1',
+        name: 'web-01',
+        type: 'SERVER',
+        ipAddress: '1.1.1.1',
+        status: 'ACTIVE',
+        username: 'u',
+      },
+    ]);
+    fixture.detectChanges();
+
+    expect(fixture.debugElement.query(By.css('[data-testid="add-asset-button"]'))).not.toBeNull();
+    expect(fixture.debugElement.query(By.css('[data-testid="edit-button"]'))).not.toBeNull();
+  });
+
+  it('allows management without a user only when auth is disabled', () => {
+    expect(canManageAssets(null, false)).toBe(true);
+    expect(canManageAssets(null, true)).toBe(false);
+    expect(canManageAssets({ username: 'admin', role: 'ADMIN' }, true)).toBe(true);
+    expect(canManageAssets({ username: 'viewer', role: 'VIEWER' }, true)).toBe(false);
+  });
+
+  it('hides management affordances for VIEWER users', () => {
+    userSubject.next({ username: 'viewer', role: 'VIEWER' });
+    const fixture = setup();
+    emitAssets([
+      {
+        id: 'a-1',
+        name: 'web-01',
+        type: 'SERVER',
+        ipAddress: '1.1.1.1',
+        status: 'ACTIVE',
+        username: 'u',
+      },
+    ]);
+    fixture.detectChanges();
+
+    expect(fixture.debugElement.query(By.css('[data-testid="add-asset-button"]'))).toBeNull();
+    expect(fixture.debugElement.query(By.css('[data-testid="edit-button"]'))).toBeNull();
+  });
+
+  it('shows a read-only empty state for VIEWER users', () => {
+    userSubject.next({ username: 'viewer', role: 'VIEWER' });
+    const fixture = setup();
+    emitAssets([]);
+    fixture.detectChanges();
+
+    const emptyState = fixture.debugElement.query(By.css('[data-testid="empty-state"]'));
+    expect(emptyState.nativeElement.textContent).toContain(
+      'No assets are currently available.',
+    );
+    expect(emptyState.nativeElement.textContent).not.toContain('+ Add Asset');
+  });
+
+  it('logs out and navigates to login when the header emits logout', () => {
+    const fixture = setup();
+    emitAssets([]);
+    fixture.detectChanges();
+
+    fixture.debugElement.query(By.css('[data-testid="logout-button"]')).nativeElement.click();
+
+    expect(authService.logout).toHaveBeenCalledTimes(1);
+    expect(router.navigateByUrl).toHaveBeenCalledOnceWith('/login');
   });
 
   it('reflects a disconnected header when an API error is emitted', () => {

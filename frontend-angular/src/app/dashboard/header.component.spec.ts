@@ -4,7 +4,12 @@ import { By } from '@angular/platform-browser';
 import { HeaderComponent } from './header.component';
 
 describe('HeaderComponent', () => {
-  function setup(inputs: { assetCount: number; isConnected?: boolean; canManage?: boolean }) {
+  function setup(inputs: {
+    assetCount: number;
+    isConnected?: boolean;
+    canManage?: boolean;
+    username?: string | null;
+  }) {
     const fixture = TestBed.createComponent(HeaderComponent);
     fixture.componentRef.setInput('assetCount', inputs.assetCount);
     if (inputs.isConnected !== undefined) {
@@ -12,6 +17,9 @@ describe('HeaderComponent', () => {
     }
     if (inputs.canManage !== undefined) {
       fixture.componentRef.setInput('canManage', inputs.canManage);
+    }
+    if (inputs.username !== undefined) {
+      fixture.componentRef.setInput('username', inputs.username);
     }
     fixture.detectChanges();
     return fixture;
@@ -54,7 +62,7 @@ describe('HeaderComponent', () => {
   });
 
   it('emits addAsset when the add button is clicked', () => {
-    const fixture = setup({ assetCount: 2 });
+    const fixture = setup({ assetCount: 2, canManage: true });
     let emitted = 0;
     fixture.componentInstance.addAsset.subscribe(() => (emitted += 1));
 
@@ -72,8 +80,33 @@ describe('HeaderComponent', () => {
     expect(button).toBeNull();
   });
 
-  it('renders without any injected API dependency (pure coordination)', () => {
-    const fixture = setup({ assetCount: 1 });
-    expect(fixture.componentInstance).toBeTruthy();
+  it('renders the current username and logout button when username is provided', () => {
+    const fixture = setup({ assetCount: 2, username: 'admin' });
+
+    const user = fixture.debugElement.query(By.css('[data-testid="current-user"]'));
+    const logout = fixture.debugElement.query(By.css('[data-testid="logout-button"]'));
+
+    expect(user).not.toBeNull();
+    expect(user.nativeElement.textContent).toContain('admin');
+    expect(logout).not.toBeNull();
   });
+
+  it('hides the current user and logout button when username is not provided', () => {
+    const fixture = setup({ assetCount: 2, username: null });
+
+    expect(fixture.debugElement.query(By.css('[data-testid="current-user"]'))).toBeNull();
+    expect(fixture.debugElement.query(By.css('[data-testid="logout-button"]'))).toBeNull();
+  });
+
+  it('emits logout when the logout button is clicked', () => {
+    const fixture = setup({ assetCount: 2, username: 'viewer' });
+    let emitted = 0;
+    fixture.componentInstance.logout.subscribe(() => (emitted += 1));
+
+    fixture.debugElement.query(By.css('[data-testid="logout-button"]')).nativeElement.click();
+    fixture.detectChanges();
+
+    expect(emitted).toBe(1);
+  });
+
 });

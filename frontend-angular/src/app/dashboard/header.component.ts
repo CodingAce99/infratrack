@@ -2,13 +2,14 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 
 /**
  * Dashboard header. Presentational coordination component showing the active
- * asset count, an API connection indicator, and the "+ Add Asset" trigger.
+ * asset count, API connection indicator, current user, logout trigger, and
+ * role-gated "+ Add Asset" trigger.
  *
  * The connection indicator exposes a `data-connected` attribute (`true`/`false`)
  * so the theme can apply the connected (green) / disconnected (gray) dot color
- * without tests coupling to CSS class names. `canManage` is an auth-affordance
- * seam defaulted to `true`; it controls whether the add button is rendered.
- * Real auth (JWT/roles) is intentionally out of scope for this slice.
+ * without tests coupling to CSS class names. Auth state is received through
+ * inputs so the header stays presentational; it never reads `AuthService`
+ * directly.
  */
 @Component({
   selector: 'app-header',
@@ -25,16 +26,32 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
         ></span>
         <span class="header__count" data-testid="asset-count">{{ assetCount() }} assets</span>
       </div>
-      @if (canManage()) {
-        <button
-          type="button"
-          class="header__add"
-          data-testid="add-asset-button"
-          (click)="addAsset.emit()"
-        >
-          + Add Asset
-        </button>
-      }
+      <div class="header__actions">
+        @if (username()) {
+          <span class="header__user" data-testid="current-user">
+            {{ username() }}
+          </span>
+          <button
+            type="button"
+            class="header__logout"
+            data-testid="logout-button"
+            (click)="logout.emit()"
+          >
+            Logout
+          </button>
+        }
+
+        @if (canManage()) {
+          <button
+            type="button"
+            class="header__add"
+            data-testid="add-asset-button"
+            (click)="addAsset.emit()"
+          >
+            + Add Asset
+          </button>
+        }
+      </div>
     </header>
   `,
   styles: [
@@ -50,6 +67,13 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
         display: flex;
         align-items: center;
         gap: var(--spacing-sm);
+      }
+      .header__actions {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+        flex-wrap: wrap;
+        justify-content: flex-end;
       }
       .header__connection {
         display: inline-block;
@@ -67,6 +91,24 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
         font-family: var(--font-mono);
         font-size: 0.875rem;
         color: var(--text-secondary);
+      }
+      .header__user {
+        color: var(--text-secondary);
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+      }
+      .header__logout {
+        background: transparent;
+        color: var(--text-secondary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 0.8125rem;
+        font-weight: 600;
+        padding: 0.5rem 0.875rem;
+      }
+      .header__logout:hover {
+        color: var(--text-primary);
+        border-color: var(--text-secondary);
       }
       .header__add {
         background: var(--accent);
@@ -86,6 +128,8 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 export class HeaderComponent {
   readonly assetCount = input.required<number>();
   readonly isConnected = input<boolean>(false);
-  readonly canManage = input<boolean>(true);
+  readonly canManage = input<boolean>(false);
   readonly addAsset = output<void>();
+  readonly username = input<string | null>(null);
+  readonly logout = output<void>();
 }
