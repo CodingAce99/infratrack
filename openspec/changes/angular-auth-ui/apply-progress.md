@@ -1,6 +1,6 @@
-# Apply Progress: Angular Auth UI — PR 1 (Auth Core)
+# Apply Progress: Angular Auth UI
 
-## Slice Scope
+## PR 1 Historical Slice Scope
 
 This apply batch implements **PR 1 — Auth Core** only, as defined by the
 `force-chained` / `feature-branch-chain` decision recorded in `tasks.md`.
@@ -25,7 +25,6 @@ This apply batch implements **PR 1 — Auth Core** only, as defined by the
 | File | Action | What Was Done |
 |------|--------|---------------|
 | `frontend-angular/src/app/core/models.ts` | Modified | Added `LoginRequest`, `AuthUser`, `LoginResponse` interfaces (reuses existing `UserRole`). |
-| `frontend-angular/src/app/core/models.spec.ts` | Created | Type-level contract tests for the new auth models. |
 | `frontend-angular/src/app/core/auth.service.ts` | Created | `AuthService` (session root), `decodeAuthUser`, `AUTH_TOKEN_KEY`. Login/logout, localStorage persistence, constructor-time restore from stored token. |
 | `frontend-angular/src/app/core/auth.service.spec.ts` | Created/Modified | RED spec for `AuthService` + `decodeAuthUser`. Fixed pre-existing TypeScript compile blockers in the authored RED spec (`.catch` on `Observable`, generic type args on `toBe`/`toEqual`) without changing assertions. |
 | `frontend-angular/src/app/core/auth.interceptor.ts` | Created | Functional `authInterceptor`: Bearer header on `/api/*` when token exists; clears session on protected 401; preserves session on 403; skips login-URL 401. No redirect yet (PR 1 boundary). |
@@ -37,7 +36,7 @@ This apply batch implements **PR 1 — Auth Core** only, as defined by the
 
 | Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
 |------|-----------|-------|------------|-----|-------|-------------|----------|
-| 1.1 | `core/models.spec.ts` | Unit | N/A (new) | ✅ Test authored first (REDS pre-existed) | ✅ 3 specs passing | ✅ ADMIN + VIEWER + response shape | ➖ None (structural types) |
+| 1.1 | Production build + consuming auth tests | Structural | N/A (new) | ➖ Runtime RED/GREEN is not applicable to erased TypeScript interfaces | ✅ Angular compilation and consuming auth tests pass | ✅ ADMIN + VIEWER contracts consumed by runtime-tested code | ➖ Compile-time contract only |
 | 1.2 | `core/auth.service.spec.ts` | Unit | N/A (new) | ✅ Test authored first (RED pre-existed; `auth.service.ts` absent) | ✅ 6 AuthService specs passing | ✅ ADMIN + VIEWER login, restore valid/invalid | Extracted `decodeAuthUser` + `base64UrlDecode` pure helpers |
 | 1.3 | `core/auth.service.spec.ts` | Unit | N/A (new) | ✅ Same spec as 1.2 covers persistence/restore/invalidate paths | ✅ Verified within the same 14/14 pass (incl. 7 `decodeAuthUser` + 2 restore) | ✅ Invalid token, missing `sub`, invalid `role`, malformed payload | ➖ Same spec used for 1.2/1.3 |
 | 2.1 | `core/auth.interceptor.spec.ts` | Unit | N/A (new) | ✅ Spec written before `auth.interceptor.ts` (RED: `TS2307 Cannot find module './auth.interceptor'`) | ✅ 7 specs passing | ✅ GET + PUT header injection, 401 protected vs 401 login, 403 preserve | ➖ None needed (one pure interceptor fn + catcher) |
@@ -46,9 +45,9 @@ This apply batch implements **PR 1 — Auth Core** only, as defined by the
 
 ### Test Summary
 
-- **Total tests written this slice**: 24 (3 `models.spec` + 14 `auth.service.spec` + 7 `auth.interceptor.spec`)
-- **Total tests passing**: 24 (auth slice) + 96 pre-existing = 120/120 in `frontend-angular/`
-- **Layers used**: Unit (24)
+- **Total behavioral tests written this slice**: 21 (14 `auth.service.spec` + 7 `auth.interceptor.spec`)
+- **Structural validation**: auth model interfaces compile through their production consumers and the Angular production build
+- **Layers used**: Unit (21) + structural compile-time validation
 - **Approval tests (refactoring)**: None — no refactoring tasks
 - **Pure functions created**: `decodeAuthUser(token)`, `base64UrlDecode(segment)`
 
@@ -58,7 +57,7 @@ All frontend tests run from `frontend-angular/`:
 
 ```
 npm test
-# => TOTAL: 120 SUCCESS
+# => Historical PR 1 run: 120 SUCCESS before removal of 3 literal-only model specs
 ```
 
 Per-file TDD runs:
@@ -66,7 +65,7 @@ Per-file TDD runs:
 ```
 npm test -- --include=src/app/core/auth.service.spec.ts     # 14 SUCCESS
 npm test -- --include=src/app/core/auth.interceptor.spec.ts  # 7 SUCCESS
-npm test                                                     # 120 SUCCESS (no regressions)
+npm test                                                     # Historical PR 1 run: 120 SUCCESS
 ```
 
 Backend Maven tests (`./mvnw test -Dspring.profiles.active=dev`) are not
@@ -104,7 +103,10 @@ at its prior 173-passing baseline.
 - Confirm `localStorage`-as-token-store XSS tradeoff is documented in
   `auth.service.ts` (it is). Mitigation deferred per the approved clarification.
 
-## Remaining Tasks (PR 2 — Login UI + Integration)
+## PR 2 Plan at PR 1 Completion
+
+This checklist records the state when PR 1 ended. All items were subsequently
+completed in the PR 2 section below.
 
 - [ ] 3.1 Create `core/auth.guard.ts`: `canActivate` redirects unauthenticated to `/login`
 - [ ] 3.2 Write `core/auth.guard.spec.ts`: authenticated passes, unauthenticated redirects
@@ -116,7 +118,7 @@ at its prior 173-passing baseline.
 - [ ] 5.4 Update `app.routes.ts`: add `/login` route with `LoginComponent`, apply `authGuard` to dashboard
 - [ ] 5.5 Update existing header/dashboard specs for role-driven affordances and logout
 
-## PR Boundary
+## PR 1 Historical Boundary
 
 - **Mode**: chained PR slice (feature-branch-chain)
 - **Current work unit**: PR 1 — Auth Core
@@ -160,11 +162,78 @@ left to existing behavior. Clearly expired tokens are never trusted.
 
 ```
 npm test -- --include=src/app/core/auth.service.spec.ts  # 20/20 SUCCESS (was 14; +6)
-npm test                                                 # 126/126 SUCCESS (was 120; no regressions)
+npm test                                                 # Historical run: 126/126 SUCCESS (before literal-only spec removal)
+```
+
+## PR 2 Progress — Login UI + Integration
+
+PR 2 has now completed the remaining Login UI + Integration tasks in a
+mentored implementation flow.
+
+### Completed Tasks Added After PR 1
+
+- [x] 3.1 Create `core/auth.guard.ts`: `canActivate` redirects unauthenticated to `/login`
+- [x] 3.2 Write `core/auth.guard.spec.ts`: authenticated passes, unauthenticated redirects
+- [x] 4.1 Create standalone `login/login.component.ts` (ReactiveForms, username/password, inline 401 error, success navigates to `/`)
+- [x] 4.2 Write `login/login.component.spec.ts`: submit calls `AuthService.login()`, 401 shows error, success navigates
+- [x] 5.1 Update `dashboard/dashboard.component.ts`: inject `AuthService`, derive `canManage` from role, pass to header
+- [x] 5.2 Update `dashboard/header.component.ts`: show username + logout, gate add button by `canManage`
+- [x] 5.3 Update `core/auth.interceptor.ts`: add 401 redirect to `/login` after login route exists
+- [x] 5.4 Update `app.routes.ts`: add `/login` route with `LoginComponent`, apply `authGuard` to dashboard
+- [x] 5.5 Update existing header/dashboard specs for role-driven affordances and logout
+
+### Files Changed in Final Dashboard Integration Batch
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `frontend-angular/src/app/dashboard/dashboard.component.ts` | Modified | Injected `AuthService`, projected `user$` into `currentUsername` and role-driven `canManage`, passed auth affordances to header and asset cards, and delegated logout through `onLogout()`. |
+| `frontend-angular/src/app/dashboard/header.component.ts` | Modified | Added `username` input and `logout` output, rendered current user and logout button, kept add button role-gated by `canManage`, and added matching header action styles. |
+| `frontend-angular/src/app/dashboard/header.component.spec.ts` | Modified | Added coverage for username rendering, absent-user hiding, and logout emission. |
+| `frontend-angular/src/app/dashboard/dashboard.component.spec.ts` | Modified | Added `AuthService` mock stream and coverage for username projection, ADMIN management affordances, VIEWER read-only affordances, and logout delegation. |
+
+### TDD Cycle Evidence — Final Dashboard Integration Batch
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | REFACTOR |
+|------|-----------|-------|------------|-----|-------|----------|
+| 5.1 | `dashboard.component.spec.ts` | Component | Existing dashboard specs + new auth projection specs | ⚠️ Mentored flow implemented TypeScript first, then added focused specs in same batch | ✅ Current suite: 17/17 | Updated stale dashboard auth-affordance comment and signal binding consistency |
+| 5.2 | `header.component.spec.ts` | Component | Existing header specs + new username/logout specs | ⚠️ Mentored flow implemented template/input/output first, then added focused specs in same batch | ✅ Current suite: 9/9 | Kept header presentational; added action grouping styles |
+| 5.5 | `header.component.spec.ts`, `dashboard.component.spec.ts` | Component | Existing dashboard/header behavior | ✅ Specs added for role-driven affordances and logout | ✅ Focused dashboard/header specs passed | None |
+
+### Focused Test Execution
+
+All frontend tests below were run from `frontend-angular/`:
+
+```
+npm test -- --include=src/app/dashboard/header.component.spec.ts     # Current total: 9 SUCCESS
+npm test -- --include=src/app/dashboard/dashboard.component.spec.ts  # Current total: 17 SUCCESS
+```
+
+### Final Verification and Gate Corrections
+
+The final Strict-TDD review removed `core/models.spec.ts` because its three
+runtime assertions only inspected literals created by the tests. TypeScript
+interfaces are erased at runtime; their contract is instead validated by the
+production build and by the behavioral tests that consume them. A redundant
+header component truthiness smoke test was also removed.
+
+The final review also corrected four auth edge cases:
+
+- A late 401 from an old-token or no-token request no longer clears a newer authenticated session.
+- Login distinguishes invalid credentials from infrastructure failures and cancels in-flight requests when the component is destroyed.
+- VIEWER users receive a read-only empty state instead of instructions for a hidden management action.
+- Development builds bypass the route guard and expose management controls so `npm run dev` remains usable with the auth-free backend dev profile; production builds remain guarded and role-based.
+
+Final verification from `frontend-angular/`:
+
+```
+npm test  # TOTAL: 143 SUCCESS
+npm test -- --include=src/app/core/auth.service.spec.ts --include=src/app/core/auth.interceptor.spec.ts --include=src/app/core/auth.guard.spec.ts --include=src/app/login/login.component.spec.ts --include=src/app/app.routes.spec.ts --include=src/app/dashboard/header.component.spec.ts --include=src/app/dashboard/dashboard.component.spec.ts
+# => TOTAL: 66 SUCCESS
+npm run build  # production build succeeds
+npm run build -- --configuration development  # development build succeeds
 ```
 
 ## Status
 
-6/15 tasks complete. Ready for the next chain element (PR 2 — Login UI +
-Integration). Not ready for sdd-verify yet: PR 2 must land first so the full
-change is integration-complete.
+15/15 tasks complete. Ready for `sdd-verify` / full verification of the
+`angular-auth-ui` change before archive or PR finalization.

@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  inject,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
@@ -148,6 +155,7 @@ export class LoginComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly form = this.fb.nonNullable.group({
     username: ['', [Validators.required]],
@@ -168,15 +176,21 @@ export class LoginComponent {
 
     const request = this.form.getRawValue();
 
-    this.authService.login(request).subscribe({
-      next: () => {
-        this.submitting = false;
-        this.router.navigateByUrl('/');
-      },
-      error: () => {
-        this.submitting = false;
-        this.errorMessage = 'Invalid username or password.';
-      },
-    });
+    this.authService
+      .login(request)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.submitting = false;
+          this.router.navigateByUrl('/');
+        },
+        error: (error: HttpErrorResponse) => {
+          this.submitting = false;
+          this.errorMessage =
+            error.status === 401
+              ? 'Invalid username or password.'
+              : 'Unable to sign in. Please try again.';
+        },
+      });
   }
 }

@@ -15,6 +15,9 @@ describe('app.routes', () => {
   async function setup(isAuthenticated = true) {
     const err$ = new Subject<ApiError>();
     const authenticated$ = new BehaviorSubject<boolean>(isAuthenticated);
+    const user$ = new BehaviorSubject(
+      isAuthenticated ? { username: 'admin', role: 'ADMIN' as const } : null,
+    );
     await TestBed.configureTestingModule({
       providers: [
         provideRouter(routes),
@@ -22,7 +25,9 @@ describe('app.routes', () => {
           provide: AuthService,
           useValue: {
             isAuthenticated$: authenticated$.asObservable(),
+            user$: user$.asObservable(),
             login: jasmine.createSpy('login'),
+            logout: jasmine.createSpy('logout'),
           },
         },
         {

@@ -6,11 +6,14 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 
-import { AssetService } from '../core/asset.service';
+import { environment } from '../../environments/environment';
 import { ApiError } from '../core/api-error';
-import { Asset } from '../core/models';
+import { AssetService } from '../core/asset.service';
+import { AuthService } from '../core/auth.service';
+import { Asset, AuthUser } from '../core/models';
 import { HeaderComponent } from './header.component';
 import { AssetCardComponent } from '../assets/asset-card.component';
 import { CreateAssetModalComponent } from '../assets/create-asset-modal.component';
@@ -18,6 +21,13 @@ import { CreateAssetModalComponent } from '../assets/create-asset-modal.componen
 /** Asset-list refresh cadence (milliseconds). Interaction-safe: suppressed
  * while a modal is open or a card is editing. */
 const REFRESH_INTERVAL_MS = 60_000;
+
+export function canManageAssets(
+  user: AuthUser | null,
+  authRequired: boolean,
+): boolean {
+  return !authRequired || user?.role === 'ADMIN';
+}
 
 /**
  * Composition root for the operations dashboard.
@@ -30,9 +40,8 @@ const REFRESH_INTERVAL_MS = 60_000;
  * interaction-active check so it never closes an open modal/panel or
  * overwrites in-progress forms.
  *
- * `canManage` is passed downstream as an auth-affordance seam (defaults to
- * `true` so management actions stay usable in this operationally-focused
- * slice; a later auth slice will drive it from the authenticated user's role).
+ * Auth state is projected into dashboard affordances: ADMIN users can manage
+ * assets, while VIEWER users keep read-only dashboard access.
  */
 @Component({
   selector: 'app-dashboard',
@@ -44,8 +53,10 @@ const REFRESH_INTERVAL_MS = 60_000;
       <app-header
         [assetCount]="assets().length"
         [isConnected]="isConnected()"
-        [canManage]="canManage"
+        [canManage]="canManage()"
+        [username]="currentUsername()"
         (addAsset)="openCreateModal()"
+        (logout)="onLogout()"
       />
 
       @if (confirmation()) {
@@ -61,7 +72,11 @@ const REFRESH_INTERVAL_MS = 60_000;
 
       @if (assets().length === 0) {
         <p class="dashboard__empty" data-testid="empty-state">
-          No assets yet. Click "+ Add Asset" to register one.
+          @if (canManage()) {
+            No assets yet. Click "+ Add Asset" to register one.
+          } @else {
+            No assets are currently available.
+          }
         </p>
       } @else {
         <section class="dashboard__grid">
@@ -69,7 +84,7 @@ const REFRESH_INTERVAL_MS = 60_000;
             <app-asset-card
               [asset]="asset"
               [isEditing]="asset.id === editingAssetId()"
-              [canManage]="canManage"
+              [canManage]="canManage()"
               (requestEdit)="onRequestEdit(asset.id)"
               (closeEdit)="onCloseEdit(asset.id)"
             />
@@ -126,6 +141,8 @@ const REFRESH_INTERVAL_MS = 60_000;
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   private readonly assetService = inject(AssetService);
+  private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
 
   readonly assets = signal<Asset[]>([]);
   readonly isConnected = signal<boolean>(true);
@@ -133,13 +150,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   readonly editingAssetId = signal<string | null>(null);
   readonly confirmation = signal<string | null>(null);
   readonly dashboardError = signal<string | null>(null);
-
-  /**
-   * Auth-affordance seam. Defaults to `true` so management actions are usable
-   * in this monitoring/operations slice; a later auth slice will drive this from
-   * the authenticated user's role. No real frontend auth is implemented here.
-   */
-  readonly canManage = true;
+  readonly currentUsername = signal<string | null>(null);
+  readonly canManage = signal<boolean>(false);
 
   private readonly subscriptions: Subscription = new Subscription();
   private intervalId?: ReturnType<typeof setInterval>;
@@ -152,6 +164,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.dashboardError.set(null);
       }),
     );
+
+    this.subscriptions.add(
+      this.authService.user$.subscribe((user) => {
+        this.canManage.set(canManageAssets(user, environment.authRequired));
+        this.currentUsername.set(user?.username ?? null);
+      }),
+    );
+
     this.subscriptions.add(
       this.assetService.error$.subscribe((err: ApiError) => {
         this.isConnected.set(false);
@@ -192,6 +212,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.editingAssetId() === _assetId) {
       this.editingAssetId.set(null);
     }
+  }
+
+  onLogout(): void {
+    this.authService.logout();
+    this.router.navigateByUrl('/login');
   }
 
   private isInteractionActive(): boolean {

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 
 import { LoginComponent } from './login.component';
 import { AuthService } from '../core/auth.service';
@@ -116,5 +116,38 @@ describe('LoginComponent', () => {
     );
     expect(router.navigateByUrl).not.toHaveBeenCalled();
     expect(fixture.componentInstance.submitting).toBe(false);
+  });
+
+  it('distinguishes service failures from invalid credentials', () => {
+    const fixture = setup();
+    fillValidForm(fixture);
+    authService.login.and.returnValue(
+      throwError(() => ({ status: 503, statusText: 'Service Unavailable' })),
+    );
+
+    fixture.debugElement.query(By.css('[data-testid="login-submit"]')).nativeElement.click();
+    fixture.detectChanges();
+
+    const error = fixture.debugElement.query(By.css('[data-testid="login-error"]'));
+    expect(error.nativeElement.textContent).toContain(
+      'Unable to sign in. Please try again.',
+    );
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('cancels an in-flight login when the component is destroyed', () => {
+    const response = new Subject<LoginResponse>();
+    const fixture = setup();
+    fillValidForm(fixture);
+    authService.login.and.returnValue(response.asObservable());
+
+    fixture.debugElement.query(By.css('[data-testid="login-submit"]')).nativeElement.click();
+    expect(response.observed).toBe(true);
+
+    fixture.destroy();
+    expect(response.observed).toBe(false);
+
+    response.next(loginResponse);
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
   });
 });

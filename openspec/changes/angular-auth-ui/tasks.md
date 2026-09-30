@@ -47,8 +47,8 @@ Chain strategy: feature-branch-chain
 
 ## Phase 5: Dashboard Integration & Route Wiring
 
-- [ ] 5.1 Update `dashboard/dashboard.component.ts`: inject `AuthService`, derive `canManage` from role, pass to header
-- [ ] 5.2 Update `dashboard/header.component.ts`: show username + logout, gate add button by `canManage`
+- [x] 5.1 Update `dashboard/dashboard.component.ts`: inject `AuthService`, derive `canManage` from role, pass to header
+- [x] 5.2 Update `dashboard/header.component.ts`: show username + logout, gate add button by `canManage`
 - [x] 5.3 Update `core/auth.interceptor.ts`: add 401 redirect to `/login` after login route exists
 - [x] 5.4 Update `app.routes.ts`: add `/login` route with `LoginComponent`, apply `authGuard` to dashboard
-- [ ] 5.5 Update existing header/dashboard specs for role-driven affordances and logout
+- [x] 5.5 Update existing header/dashboard specs for role-driven affordances and logout

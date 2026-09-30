@@ -15,7 +15,7 @@ import { authInterceptor } from './auth.interceptor';
 import { AuthService } from './auth.service';
 
 /**
- * `authInterceptor` coverage for PR 1 (Auth Core):
+ * `authInterceptor` coverage for the complete auth flow:
  *  - Bearer header injection on `/api/*` requests when a token exists.
  *  - No header when no token exists.
  *  - No header for non-`/api/*` requests (token never leaks off-origin).
@@ -130,6 +130,38 @@ describe('authInterceptor', () => {
       { error: 'Invalid credentials' },
       { status: 401, statusText: 'Unauthorized' },
     );
+
+    expect(authSpy.logout).not.toHaveBeenCalled();
+    expect(routerSpy.navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('does NOT clear a newer session when an old-token request returns 401', () => {
+    authSpy.getToken.and.returnValues('old-token', 'new-token');
+
+    http.get('/api/v1/assets').subscribe({
+      next: () => fail('expected the 401 response to error'),
+      error: (err: HttpErrorResponse) => expect(err.status).toBe(401),
+    });
+
+    const req = httpMock.expectOne('/api/v1/assets');
+    expect(req.request.headers.get('Authorization')).toBe('Bearer old-token');
+    req.flush({ error: 'Unauthorized' }, { status: 401, statusText: 'Unauthorized' });
+
+    expect(authSpy.logout).not.toHaveBeenCalled();
+    expect(routerSpy.navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('does NOT clear a new session when a no-token request returns a late 401', () => {
+    authSpy.getToken.and.returnValues(null, 'new-token');
+
+    http.get('/api/v1/assets').subscribe({
+      next: () => fail('expected the 401 response to error'),
+      error: (err: HttpErrorResponse) => expect(err.status).toBe(401),
+    });
+
+    const req = httpMock.expectOne('/api/v1/assets');
+    expect(req.request.headers.has('Authorization')).toBe(false);
+    req.flush({ error: 'Unauthorized' }, { status: 401, statusText: 'Unauthorized' });
 
     expect(authSpy.logout).not.toHaveBeenCalled();
     expect(routerSpy.navigateByUrl).not.toHaveBeenCalled();
