@@ -45,6 +45,30 @@ export interface UpdateCredentialsRequest {
   password: string;
 }
 
+/** Credentials submitted to the login API. */
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+/** Authenticated principal exposed to the frontend. */
+export interface AuthUser {
+  username: string;
+  role: UserRole;
+}
+
+/**
+ * Login API response contract.
+ * `type` is always `'Bearer'`; it is kept on the payload to mirror the backend
+ * `AuthenticationResult` and the `Authorization` header value prefix.
+ */
+export interface LoginResponse {
+  token: string;
+  type: 'Bearer';
+  username: string;
+  role: UserRole;
+}
+
 /** Asset type options for form selects. */
 export const ASSET_TYPES: readonly AssetType[] = ['SERVER', 'ROUTER', 'IOT_DEVICE'];
 
